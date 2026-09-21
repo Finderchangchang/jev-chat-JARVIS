@@ -1,7 +1,6 @@
 package com.jev.probe.capture
 
 import android.accessibilityservice.AccessibilityService
-import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -9,7 +8,6 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.jev.probe.core.ChatSnapshot
-import com.jev.probe.core.Msg
 import com.jev.probe.core.Prefs
 import com.jev.probe.jev.JevClient
 import com.jev.probe.overlay.OverlayController
@@ -18,17 +16,25 @@ import java.util.concurrent.RejectedExecutionException
 
 /**
  * The live capture service (registered under a disguised class name so WeChat
- * exposes its node tree — see the disguised subclass). It reads the open WeChat
- * chat, detects a new incoming message from the other person, runs Jev analysis
- * off the main thread, and drives the floating overlay.
+ * exposes its node tree — see the disguised subclass). It reads whichever
+ * adapted chat app is in the foreground, detects a new incoming message from the
+ * other person, runs Jev analysis off the main thread, and drives the floating
+ * overlay.
  *
- * It never sends a message. The only write action is ACTION_SET_TEXT to fill the
- * WeChat input box when the user taps "填入"; the user still presses send.
+ * Per-app node rules live in [ChatAppAdapter] implementations; everything here
+ * is app-agnostic.
+ *
+ * It never sends a message. The only write action is ACTION_SET_TEXT (or a
+ * clipboard PASTE fallback) to fill the chat input box when the user taps
+ * "填入"; the user still presses send.
  */
-open class WeChatCaptureService : AccessibilityService() {
+open class ChatCaptureService : AccessibilityService() {
 
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newFixedThreadPool(2)
+
+    /** Adapted chat apps, keyed by package name. */
+    private val adapters = listOf(WeChatAdapter(), FeishuAdapter()).associateBy { it.pkg }
 
     /** Submit to the worker, ignoring rejection after the service is torn down
      *  (a stale overlay callback must never crash the process). */
@@ -39,6 +45,7 @@ open class WeChatCaptureService : AccessibilityService() {
     private var overlay: OverlayController? = null
 
     private var lastSignature: String = ""
+    private var activePkg: String? = null
     private var analyzing = false
     private val debounce = Runnable { runAnalysis() }
     private var pendingSnapshot: ChatSnapshot? = null
@@ -66,14 +73,15 @@ open class WeChatCaptureService : AccessibilityService() {
         if (!prefs.enabled) { main.post { overlay?.hide() }; return }
 
         val type = event.eventType
-        // Decide "did we leave WeChat" from the REAL active window, not the event's
-        // package. The event package can be an IME (e.g. com.tencent.wetype) or the
-        // status bar while WeChat is still foreground — keying off it made the bubble
-        // flicker (hide → re-show → hide…). rootInActiveWindow stays WeChat while the
-        // keyboard is up, so this is stable.
+        // Decide "did we leave the chat app" from the REAL active window, not the
+        // event's package. The event package can be an IME (e.g. com.tencent.wetype)
+        // or the status bar while the chat app is still foreground — keying off it
+        // made the bubble flicker (hide → re-show → hide…). rootInActiveWindow stays
+        // on the chat app while the keyboard is up, so this is stable. Our own app
+        // (com.jev.probe) is not an adapted package, so it hides too.
         if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val fg = rootInActiveWindow?.packageName?.toString()
-            if (fg != null && fg != WECHAT) {
+            if (fg != null && fg !in adapters) {
                 foregroundPkg = fg
                 main.post { overlay?.hide() }
                 return
@@ -89,10 +97,16 @@ open class WeChatCaptureService : AccessibilityService() {
 
     private fun maybeCapture() {
         val root = rootInActiveWindow ?: return
-        // Only act inside a chat window (has message bubbles).
-        val snapshot = extractSnapshot(root) ?: return
+        val pkg = root.packageName?.toString()
+        val adapter = adapters[pkg] ?: return
+        // Only act inside a chat window (the adapter returns null elsewhere).
+        val snapshot = adapter.extract(root, resources) ?: return
         if (snapshot.messages.isEmpty()) return
         if (!prefs.isAllowed(snapshot.title)) { main.post { overlay?.hide() }; return }
+
+        // Switching to another adapted app resets the dedupe signature, so two apps
+        // whose last few messages happen to match cannot swallow each other.
+        if (pkg != activePkg) { activePkg = pkg; lastSignature = "" }
 
         currentSnapshot = snapshot
         val sig = snapshot.signature()
@@ -103,6 +117,8 @@ open class WeChatCaptureService : AccessibilityService() {
         // back) → just put the bubble back, do NOT re-analyze (saves tokens/time).
         if (sig == lastSignature && !showing) { main.post { overlay?.showIdle(snapshot.title) }; return }
         lastSignature = sig
+        Log.d(TAG, "snapshot[$pkg] title=${snapshot.title} n=${snapshot.messages.size} " +
+            snapshot.messages.takeLast(6).joinToString(" | ") { "${it.side}:${it.text.length}" }) // sides + lengths only, never content
 
         // Trigger only when the newest message is from the other person, and only
         // if auto-analyze is on. Otherwise show the idle bubble (tap to analyze).
@@ -141,95 +157,32 @@ open class WeChatCaptureService : AccessibilityService() {
         }
     }
 
-    /** Walk the tree once, collect chat bubbles (id/bkl) and the title. */
-    private fun extractSnapshot(root: AccessibilityNodeInfo): ChatSnapshot? {
-        val width = resources.displayMetrics.widthPixels
-        val bubbles = ArrayList<Triple<Int, Int, String>>() // top, centerX, text
-        var title: String? = null
-        var firstBubbleTop = Int.MAX_VALUE
-
-        val stack = ArrayDeque<AccessibilityNodeInfo>()
-        stack.addLast(root)
-        var guard = 0
-        while (stack.isNotEmpty() && guard < 5000) {
-            guard++
-            val node = stack.removeLast()
-            val id = node.viewIdResourceName
-            val text = node.text?.toString()
-            if (id == BUBBLE_ID && !text.isNullOrBlank()) {
-                val b = Rect(); node.getBoundsInScreen(b)
-                bubbles.add(Triple(b.top, b.centerX(), text))
-                if (b.top < firstBubbleTop) firstBubbleTop = b.top
-            }
-            for (i in node.childCount - 1 downTo 0) {
-                node.getChild(i)?.let { stack.addLast(it) }
-            }
-        }
-        if (bubbles.isEmpty()) return null
-
-        // Title: topmost short text above the message area, centered-ish.
-        title = findTitle(root, firstBubbleTop, width)
-
-        // Chronological order = top to bottom.
-        bubbles.sortBy { it.first }
-        val msgs = bubbles.map { (_, cx, text) ->
-            val side = if (cx > width / 2) "me" else "other"
-            Msg(side, text)
-        }
-        return ChatSnapshot(title, msgs)
-    }
-
-    private fun findTitle(root: AccessibilityNodeInfo, firstBubbleTop: Int, width: Int): String? {
-        // The conversation title sits in the top action bar. Constrain to that
-        // band (and clear of the message area) so we don't grab an in-chat
-        // timestamp like "8月12日 18:57".
-        val actionBarMax = minOf(firstBubbleTop, (resources.displayMetrics.heightPixels * 0.14).toInt())
-        val stack = ArrayDeque<AccessibilityNodeInfo>()
-        stack.addLast(root)
-        var best: String? = null
-        var bestTop = Int.MAX_VALUE
-        var guard = 0
-        while (stack.isNotEmpty() && guard < 5000) {
-            guard++
-            val node = stack.removeLast()
-            val text = node.text?.toString()
-            if (!text.isNullOrBlank() && text.length <= 24 && !looksLikeTimestamp(text)) {
-                val b = Rect(); node.getBoundsInScreen(b)
-                if (b.bottom in 1 until actionBarMax && b.centerX() in (width / 4)..(width * 3 / 4)) {
-                    if (b.top < bestTop) { bestTop = b.top; best = text }
-                }
-            }
-            for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
-        }
-        return best
-    }
-
-    private fun looksLikeTimestamp(t: String): Boolean =
-        Regex("""\d{1,2}[:：]\d{2}""").containsMatchIn(t) ||
-            Regex("""\d+月\d+日""").containsMatchIn(t) ||
-            t == "昨天" || t == "今天"
-
-    /** Fill the WeChat input box with the chosen reply (never sends). */
+    /** Fill the chat input box with the chosen reply (never sends). */
     private fun fillInput(text: String) {
         submit {
             // Fast path: SET_TEXT works when the box already has input focus and no
             // IME composing session is active.
             var ok = trySetText(text)
             if (!ok) {
-                // Otherwise focus the box (pops the keyboard) and PASTE from the
-                // clipboard — robust against WeChat's IME composing region, which
-                // makes SET_TEXT silently fail. Never clicks send.
-                copyToClipboard(text)
+                // Otherwise focus the box (pops the keyboard) and retry SET_TEXT;
+                // if the IME composing region still swallows it (WeChat), PASTE from
+                // the clipboard. The box is cleared before PASTE so a SET_TEXT that
+                // silently took (but failed verification) never gets doubled.
+                // Never clicks send.
                 val edit = rootInActiveWindow?.let { findEditable(it) }
                 if (edit != null) {
                     edit.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     Thread.sleep(300)
-                    val focused = rootInActiveWindow?.let { findEditable(it) } ?: edit
-                    ok = focused.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-                    if (!ok) ok = trySetText(text)
+                    ok = trySetText(text)
                     if (!ok) {
-                        val after = rootInActiveWindow?.let { findEditable(it) }?.text?.toString()
-                        ok = after == text
+                        copyToClipboard(text)
+                        val focused = rootInActiveWindow?.let { findEditable(it) } ?: edit
+                        setTextRaw(focused, "")
+                        val pasted = focused.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                        Thread.sleep(150)
+                        val after = readInput()
+                        ok = (after != null && after.contains(text)) || (pasted && after == null)
+                        Log.i(TAG, "fill: paste=$pasted readback=${after?.length ?: -1}")
                     }
                 }
             }
@@ -240,16 +193,32 @@ open class WeChatCaptureService : AccessibilityService() {
         }
     }
 
-    /** Set text on the WeChat input box, verifying it actually took. */
+    /** Set text on the chat input box, verifying it actually took. */
     private fun trySetText(text: String): Boolean {
         val edit = rootInActiveWindow?.let { findEditable(it) } ?: return false
+        if (!setTextRaw(edit, text)) return false
+        // SET_TEXT can report success without filling an unfocused box; verify.
+        // Read back through refresh() — the node cache can still hold the old
+        // (empty) text right after the action, which made Feishu look like a
+        // failure and triggered a second PASTE on top.
+        Thread.sleep(150)
+        val after = readInput()
+        Log.i(TAG, "fill: setText readback=${after?.length ?: -1} want=${text.length}")
+        return after == text
+    }
+
+    private fun setTextRaw(edit: AccessibilityNodeInfo, text: String): Boolean {
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        if (!edit.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return false
-        // SET_TEXT can report success without filling an unfocused box; verify.
-        val after = rootInActiveWindow?.let { findEditable(it) }?.text?.toString()
-        return after == text
+        return edit.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+    }
+
+    /** Current text of the input box, fetched fresh (bypassing the node cache). */
+    private fun readInput(): String? {
+        val edit = rootInActiveWindow?.let { findEditable(it) } ?: return null
+        runCatching { edit.refresh() }
+        return edit.text?.toString()
     }
 
     private fun findEditable(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
@@ -284,7 +253,5 @@ open class WeChatCaptureService : AccessibilityService() {
 
     companion object {
         private const val TAG = "JEVASSIST"
-        private const val WECHAT = "com.tencent.mm"
-        private const val BUBBLE_ID = "com.tencent.mm:id/bkl"
     }
 }

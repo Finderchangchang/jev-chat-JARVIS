@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity() {
         container.removeAllViews()
 
         container.addView(text("Jev 聊天助手", 24f, ink, bold = true))
-        container.addView(text("在微信旁读对方消息，给出判断和候选回复。发送始终由你手动点。",
+        container.addView(text("在聊天 App 旁读对方消息（已支持微信、飞书），给出判断和候选回复。发送始终由你手动点。",
             13f, sub).apply { setPadding(0, dp(6), 0, dp(16)) })
 
         val a11y = isA11yEnabled()
@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
         container.addView(permCard("无障碍权限", "读取当前聊天窗口的消息文字", a11y) {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         })
-        container.addView(permCard("悬浮窗权限", "在微信上方显示分析卡片", overlay) {
+        container.addView(permCard("悬浮窗权限", "在聊天窗口上方显示分析卡片", overlay) {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         })
         container.addView(permCard("自启动 + 省电无限制", "小米/HyperOS 必做，否则服务被冻结、读不到消息", null) {

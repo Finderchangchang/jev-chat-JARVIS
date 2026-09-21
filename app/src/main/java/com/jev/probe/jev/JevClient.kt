@@ -81,7 +81,7 @@ class JevClient(private val key: String, private val replyModel: String) {
         }
         val sys = "你是中文即时通讯回复助手。只输出一个 JSON 数组，含且仅含 3 条候选回复文本，" +
             "三条策略要有区别（例如：一条稳妥承接、一条给具体行动或承诺、一条简短低姿态）。" +
-            "每条不超过 40 字，口语、自然、像真人发微信。不要解释，不要加引号以外的内容，直接输出 JSON 数组。"
+            "每条不超过 40 字，口语、自然、像真人在聊天软件里发消息。不要解释，不要加引号以外的内容，直接输出 JSON 数组。"
         val user = "关系：$relationship\n\n最近对话：\n$convo\n\n请给出 3 条候选回复。"
         val messages = JSONArray()
             .put(JSONObject().put("role", "system").put("content", sys))

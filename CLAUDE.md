@@ -1,10 +1,10 @@
-# Jev 微信聊天辅助器（安卓）
+# Jev 聊天助手（安卓）— 全平台非侵入对话副驾
 
-挂在微信旁边的非侵入式助手：读到对方最新消息 → 调 Jev 判断 → 悬浮窗给出分析和 3 条候选回复（Jev 排序）→ 人一键填入微信输入框。**发送永远由人手动点，程序不自动发。**
+挂在任意聊天 App 旁边（微信、飞书已适配）的非侵入式助手：读到对方最新消息 → 调 Jev 判断 → 悬浮窗给出分析和 3 条候选回复（Jev 排序）→ 人一键填入微信输入框。**发送永远由人手动点，程序不自动发。**
 
 ## 硬约束（所有人必须遵守）
 
-1. **不 hook、不 Xposed、不改微信、不读微信数据库**。只用系统无障碍服务与截屏。
+1. **不 hook、不 Xposed、不改目标 App、不读其数据库**。只用系统无障碍服务与截屏。
 2. **绝不自动发送消息**，绝不点微信的发送按钮。填入输入框后停手。
 3. **不碰钱**：不触碰转账、红包、收款码相关任何界面元素。
 4. **路径全 ASCII**：Android 构建工具在 Windows 上不接受中文路径。项目只能在 `H:\ai_tool\jev-android`。
@@ -24,6 +24,8 @@
 - 微信 8.0.52 起对普通无障碍服务**混淆/隐藏节点**。本机实测 `uiautomator dump` 对微信任何界面只返回一个空根节点。
 - 社区绕法：把无障碍服务的类名注册成系统内置的 `com.google.android.accessibility.selecttospeak.SelectToSpeakService`。**对 8.0.78 是否仍有效未验证，这就是探针 App 要回答的问题。**
 - 兜底路线：无障碍服务的 `takeScreenshot()` + 本地 OCR（ML Kit），同样零 token。
+- 飞书 Android（2026-09-21 实测）：消息正文自绘，无障碍树里**没有文字**（伪装服务与 `uiautomator dump` 一致），只有 `bubble_content_container` 气泡位置、`group_name` 标题、`kb_rich_text_content` 输入框；正文要走 takeScreenshot + OCR。飞书默认左对齐布局，我/对方不能按左右判。
+- 采集层按 App 分发：`capture/ChatAppAdapter.kt` 一个 App 一个适配器，`ChatCaptureService` 按前台包名查表；下游通用。
 - Jev = TypeSafe 的判断模型，只回答选择题/打分/是非，不生成文字。走 OpenRouter：
   `POST https://openrouter.ai/api/alpha/decisions`，model `typesafe/jev-1.13`，
   body `{model, state, questions}`，答案在 `answers`。实测 7 题一次约 900 ms、约 1000 输入 token、0.00004 美元。

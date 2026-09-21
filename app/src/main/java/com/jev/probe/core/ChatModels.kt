@@ -3,7 +3,8 @@ package com.jev.probe.core
 /** One captured chat bubble. side is "me" (right) or "other" (left). */
 data class Msg(val side: String, val text: String)
 
-/** A snapshot of the currently-open WeChat conversation. */
+/** A snapshot of the currently-open conversation in whichever chat app is
+ *  foreground (see ChatAppAdapter). */
 data class ChatSnapshot(
     val title: String?,
     val messages: List<Msg>

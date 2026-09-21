@@ -243,6 +243,7 @@ class OverlayController(private val ctx: Context) {
     }
 
     private var collapsedX = dp(6)
+    private var collapsedY = dp(150)
 
     private fun toggle() {
         expanded = !expanded
@@ -250,15 +251,16 @@ class OverlayController(private val ctx: Context) {
         if (expanded) {
             // Open the panel from the left, fully on-screen and up high (clear of the
             // input box), regardless of which edge the bubble was snapped to.
-            collapsedX = params.x
+            collapsedX = params.x; collapsedY = params.y
             params.x = dp(6)
             val maxTop = (screenH * 0.14f).roundToInt()
             if (params.y > maxTop) params.y = maxTop
             panel?.visibility = View.VISIBLE
         } else {
             panel?.visibility = View.GONE
-            params.x = collapsedX  // bubble returns to its edge
+            params.x = collapsedX; params.y = collapsedY  // bubble returns to where it was
         }
+        android.util.Log.d("JEVASSIST", "overlay: toggle expanded=$expanded x=${params.x} y=${params.y} saved=($collapsedX,$collapsedY)")
         root?.let { runCatching { wm.updateViewLayout(it, params) } }
     }
 
@@ -401,7 +403,7 @@ class OverlayController(private val ctx: Context) {
         val btns = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
         btns.addView(pill("复制", false) { copy(text) })
         // Fill, then collapse so the input box + keyboard are visible to review/send.
-        btns.addView(pill("填入", true) { onFill(text); if (expanded) toggle() })
+        btns.addView(pill("填入", true) { android.util.Log.d("JEVASSIST", "overlay: fill tapped"); onFill(text); if (expanded) toggle() })
         c.addView(btns)
         return c
     }

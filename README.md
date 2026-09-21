@@ -12,11 +12,11 @@
 
 - **一层通用的「对话副驾」**：不是再造一个聊天软件，而是浮在你已在用的**任何**聊天之上的分析层。看得懂语义、给得出该怎么回，你保留最终决定权（只填入不发送、不碰转账/红包/收款）。
 - **非侵入 = 可跨平台的前提**：不 hook、不改包、不走对方 App 的 API，只从屏幕采集正在显示的对话。换平台换的只是「采集方式」，判断与生成内核不变：
-  - **Android 各类 App**：无障碍读屏——微信已跑通；**飞书（Lark，`com.ss.android.lark`）** 等企业 IM 节点结构类似，正在适配
+  - **Android 各类 App**：无障碍读屏——微信已跑通；**飞书（Lark，`com.ss.android.lark`）** 已接入同一套采集分发：会话标题、气泡位置、输入框都能拿到，判断 → 候选 → 填入整条链在飞书里真机跑通。但飞书的消息正文是自绘控件、不在无障碍树里，正文采集要补「截图 + 本地 OCR」（进行中，见已知限制）
   - **桌面端 / 控件树被隐藏的场景**：截图 + OCR/视觉提取文本
   - 采集出的文本 → 同一个 **Jev 判断 + 生成模型起草 + Jev 排序** → 同一套悬浮窗展示
 - **已验证**：微信 Android 端（8.0.78 实测）——伪装无障碍服务读到聊天节点、Jev 判断 + DeepSeek 起草 + Jev 排序、悬浮窗填入，闭环打通。
-- **下一步**：先补齐 **飞书 / Lark**，再扩展到更多 IM / 桌面端 / 网页。
+- **下一步**：飞书正文走「截图 + OCR」补齐；再扩展到更多 IM / 桌面端 / 网页。
 
 > 说明：微信、飞书等都是**通用聊天场景**的适配对象；本项目只读你自己设备上、你自己有权查看的聊天，不针对任何单一平台。
 
@@ -47,10 +47,18 @@
                 半透明悬浮窗展示 → 复制 / 填入（不发送）
 ```
 
-- **采集**：无障碍服务读取微信聊天气泡（`com.tencent.mm:id/bkl`），按气泡位置判断谁说的。微信 8.0.52+ 对普通无障碍服务混淆节点，所以服务类名伪装成系统的 `com.google.android.accessibility.selecttospeak.SelectToSpeakService` 才能读到（实测微信 8.0.78 有效）。
+- **采集**：一个 App 一个适配器（`app/src/main/java/com/jev/probe/capture/ChatAppAdapter.kt`），服务按前台包名分发；适配器只负责把当前窗口变成「标题 + 消息列表（谁说的、说了什么）」，下游判断 / 悬浮窗 / 填入全部通用。微信适配器读聊天气泡（`com.tencent.mm:id/bkl`），按气泡位置判断谁说的。微信 8.0.52+ 对普通无障碍服务混淆节点，所以服务类名伪装成系统的 `com.google.android.accessibility.selecttospeak.SelectToSpeakService` 才能读到（实测微信 8.0.78 有效）。
 - **判断**：[Jev](https://docs.typesafe.ai/)（System One 判断模型）只回答选择/打分/是非，一次请求发全部题目，约 1 秒返回。
 - **回复**：生成式模型（默认 DeepSeek）起草 3 条候选，Jev 排序。
 - **回填**：`ACTION_SET_TEXT` / 剪贴板 `ACTION_PASTE` 把选中的回复填进输入框，**不发送**。
+
+## 适配一个新的聊天 App
+
+1. 在 `capture/ChatAppAdapter.kt` 里实现 `ChatAppAdapter`：`pkg` 是目标 App 包名，`extract(root, res)` 从当前窗口的无障碍树里取出会话标题和消息列表（`Msg(side, text)`，`side` 是 `me` / `other`），当前窗口不是聊天时返回 `null`。
+2. 在 `capture/ChatCaptureService.kt` 的 `adapters` 列表里加一行。
+3. 其余不用动：判断、候选、悬浮窗、填入（`findEditable` 找可编辑输入框）都是通用的。
+
+先用 `adb shell uiautomator dump` 看目标 App 暴露了哪些节点：像微信这样混淆节点的，要靠伪装服务才看得到；像飞书这样正文自绘的，正文要另走 OCR。
 
 ## 构建
 
@@ -76,6 +84,7 @@
 ## 已知限制
 
 - **国产 ROM 后台冻结**：小米/HyperOS 会激进地杀后台进程，即使配了前台保活、自启动、省电无限制仍可能被杀——被杀后气泡会短暂消失，需在微信里再交互一下自愈。这是所有「无障碍+悬浮窗」类 App 的公认难题。
+- **飞书正文**：飞书 Android 端的消息正文由自绘控件渲染，无障碍树里只有气泡的位置和大小，没有文字（`uiautomator dump` 与伪装服务读到的一致）。目前飞书里能分析到的只有文档卡片等带 TextView 的内容，正文要补「`AccessibilityService.takeScreenshot()` 裁气泡区 + ML Kit 中文识别」。飞书默认左对齐布局下「我 / 对方」也不能按左右判，要另找依据（如已读状态）。
 - **群聊**：目前按一对一分析，「对方」与关系设定对群聊不准。
 - **中文**：Jev 主训练语言是英文，题目 instructions/criteria 用英文、聊天内容保留中文；上线前建议用自己的真实对话做一批标注校准（见 `tools/jev/`）。
 - 伪装无障碍服务是绕过微信节点混淆的手段，微信版本更新可能失效。
@@ -83,7 +92,7 @@
 ## 目录
 
 - `app/` — Android 应用（Kotlin，传统 View，无 Compose）
-  - `capture/` 无障碍采集与前台保活 · `jev/` Jev 客户端与题目集 · `overlay/` 悬浮窗 · `core/` 配置与数据模型
+  - `capture/` 无障碍采集（`ChatAppAdapter.kt` 各 App 适配器、`ChatCaptureService.kt` 分发服务）与前台保活 · `jev/` Jev 客户端与题目集 · `overlay/` 悬浮窗 · `core/` 配置与数据模型
 - `tools/jev/` — Jev 题目集与校准脚手架（Python，PC 上跑）
 - `docs/` — 设计与验收文档
 

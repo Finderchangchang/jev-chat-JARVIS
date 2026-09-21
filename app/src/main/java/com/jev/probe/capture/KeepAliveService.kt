@@ -29,7 +29,7 @@ class KeepAliveService : Service() {
         }
         val notif: Notification = Notification.Builder(this, channelId)
             .setContentTitle("Jev 助手运行中")
-            .setContentText("在微信旁读消息、给回复建议")
+            .setContentText("在聊天旁读消息、给回复建议")
             .setSmallIcon(android.R.drawable.ic_menu_edit)
             .setOngoing(true)
             .build()
