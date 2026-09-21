@@ -1,26 +1,46 @@
 # Jev 聊天助手 (Jev Chat Assistant)
 
-一个**非侵入式**的实时对话理解与回复辅助层——挂在任意聊天窗口旁边，读懂对方在说什么，用 [TypeSafe **Jev**](https://typesafe.ai/) 判断模型给出「对方真实意图 / 危险等级 / 该不该马上回 / 最佳动作」，再用一个生成式模型起草 3 条候选回复并让 Jev 排序，最后以半透明悬浮窗展示，一键**填入**输入框。
+**一个装在手机上的「对话副驾」：你在任何聊天 App 里聊天，它在旁边读懂对方、告诉你该怎么回，一键填进输入框，发不发由你。**
 
-> **目标是全平台。** 微信（Android）只是我们跑通可行性的第一站。核心不依赖任何 App 的接口或账号——它只读「当前屏幕上正在发生的对话」，所以同一套 Jev 判断 + 生成排序内核可以平移到其它 IM、桌面端、乃至任何有聊天的地方——**手机 QQ** 已经这样接进来了，**飞书（Lark）** 采集分发已接入、正文待补。
->
-> **发送始终由你手动点。** 程序只读消息、只把回复填进输入框，从不自动发送、不碰转账/红包/收款。
+已真机跑通 **微信、QQ、X（Twitter 私信）** 三个平台，飞书采集已接入；换平台不用改内核，写一个几十行的适配器就行。
 
 > **联系方式：请公众号私信**（二维码见文末「交流群 / 需求收集」）。
 
-<p align="center"><em>A non-invasive, real-time conversation-understanding layer that sits beside any chat surface. It reads whatever conversation is on screen (no app integration, no account), uses Jev for typed judgments plus a generative model for 3 ranked candidate replies, shows them in a translucent overlay, and fills the input box — you press send. WeChat on Android is just the first platform we proved it on.</em></p>
+## ✨ 亮点
+
+| | |
+|---|---|
+| **一套内核，多平台** | 微信 8.0.78、QQ 9.3.50、X 12.25 三个平台真机验证：读消息 → 判断 → 候选 → 填入整条链全通。新增一个 App 只需实现一个 `ChatAppAdapter`（约 50 行），判断、悬浮窗、填入全部复用。 |
+| **非侵入，零风险** | 不 hook、不改包、不走任何 App 的接口或账号、不读数据库。只用系统无障碍服务读「屏幕上正在显示的对话」，微信这种混淆节点的也能读到。 |
+| **看得懂，不止会写** | 用 [TypeSafe **Jev**](https://typesafe.ai/) 判断模型一次给出 **对方真实意图 / 危险等级（1–9）/ 对方要什么 / 该不该马上回 / 最佳动作**，约 1 秒返回，带把握度。 |
+| **3 条候选，Jev 排序** | 生成模型（默认 DeepSeek）起草 3 条口语化回复，再由 Jev 按「最合适」排序，每条带占比，复制或一键填入。 |
+| **发送永远由你点** | 程序只把回复填进输入框，**从不自动发送**，不碰转账 / 红包 / 收款。危险等级高时先提醒你别急着回。 |
+| **悬浮窗随手用** | 半透明卡片挂在聊天上方，不透明度可调、气泡可拖动、可设会话白名单、可关自动分析改成手动点。 |
+| **隐私在本机** | API 密钥只存 App 私有空间，不进日志不进 git；聊天内容只在分析那一刻发给模型接口，不落盘。 |
+| **开箱即用** | 仓库里有签好名的 release APK，装上填个 OpenRouter 密钥就能用。 |
+
+## 平台支持
+
+| 平台 | 状态 | 采集方式 | 说明 |
+|---|---|---|---|
+| **微信** Android | ✅ 真机全链路 | 伪装系统无障碍服务读气泡节点 | 8.0.52+ 对普通无障碍服务混淆节点，伪装后 8.0.78 实测可读 |
+| **QQ** Android | ✅ 真机全链路 | 无障碍读节点（节点开放） | 9.3.50 实测，群聊验证；1v1 按同结构推断 |
+| **X / Twitter** 私信 | ✅ 真机全链路 | 解析 Compose 节点的 content-desc | 12.25 实测，中文界面；英文界面只做兜底未验 |
+| **飞书 / Lark** | 🟡 部分 | 无障碍读标题 / 气泡位置 / 输入框 | 正文是自绘控件、不在无障碍树里，要补「截图 + OCR」 |
+| 桌面端 / 网页 | ⏳ 规划 | 截图 + OCR / 视觉 | 同一内核，换采集方式 |
+
+> 微信、QQ、X、飞书都是**通用聊天场景**的适配对象；本项目只读你自己设备上、你自己有权查看的聊天，不针对任何单一平台。
+
+<p align="center"><em>A non-invasive, real-time conversation-understanding layer that sits beside any chat surface. It reads whatever conversation is on screen (no app integration, no account), uses Jev for typed judgments plus a generative model for 3 ranked candidate replies, shows them in a translucent overlay, and fills the input box — you press send. Verified end-to-end on WeChat, QQ and X (DMs) on Android; one adapter per app, one shared core.</em></p>
 
 ## 项目目标
 
 - **一层通用的「对话副驾」**：不是再造一个聊天软件，而是浮在你已在用的**任何**聊天之上的分析层。看得懂语义、给得出该怎么回，你保留最终决定权（只填入不发送、不碰转账/红包/收款）。
 - **非侵入 = 可跨平台的前提**：不 hook、不改包、不走对方 App 的 API，只从屏幕采集正在显示的对话。换平台换的只是「采集方式」，判断与生成内核不变：
-  - **Android 各类 App**：无障碍读屏——微信已跑通；**手机 QQ（`com.tencent.mobileqq`，9.3.50 实测节点开放，正文 `id/mjn`）** 已接入并真机跑通全链路；**X / Twitter 私信（`com.twitter.android`，12.25 实测，Compose 无 id、消息在 content-desc）** 已接入同一套采集分发；**飞书（Lark，`com.ss.android.lark`）** 已接入同一套采集分发：会话标题、气泡位置、输入框都能拿到，判断 → 候选 → 填入整条链在飞书里真机跑通。但飞书的消息正文是自绘控件、不在无障碍树里，正文采集要补「截图 + 本地 OCR」（进行中，见已知限制）
+  - **Android 各类 App**：无障碍读屏——微信、QQ、X 已跑通；飞书采集分发已接入、正文待补（技术细节见上表与「已知限制」）
   - **桌面端 / 控件树被隐藏的场景**：截图 + OCR/视觉提取文本
   - 采集出的文本 → 同一个 **Jev 判断 + 生成模型起草 + Jev 排序** → 同一套悬浮窗展示
-- **已验证**：微信 Android 端（8.0.78 实测）——伪装无障碍服务读到聊天节点、Jev 判断 + DeepSeek 起草 + Jev 排序、悬浮窗填入，闭环打通；手机 QQ（9.3.50 实测）——同一套内核换一个适配器，采集 / 判断 / 候选 / 填入全链路跑通。
 - **下一步**：飞书正文走「截图 + OCR」补齐；再扩展到更多 IM / 桌面端 / 网页。
-
-> 说明：微信、QQ、飞书等都是**通用聊天场景**的适配对象；本项目只读你自己设备上、你自己有权查看的聊天，不针对任何单一平台。
 
 ## 界面截图
 
