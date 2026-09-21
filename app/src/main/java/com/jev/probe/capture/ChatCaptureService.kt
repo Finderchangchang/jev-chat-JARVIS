@@ -134,10 +134,10 @@ open class ChatCaptureService : AccessibilityService() {
     private fun runAnalysis() {
         val snapshot = pendingSnapshot ?: return
         if (analyzing) return
-        if (!prefs.hasKey()) { main.post { overlay?.showError("未设置 OpenRouter 密钥，去设置里填") }; return }
+        if (!prefs.hasKey()) { main.post { overlay?.showError("未设置判断接口密钥，去设置里填") }; return }
         analyzing = true
         main.post { overlay?.showLoading() }
-        val client = JevClient(prefs.openRouterKey, prefs.replyModel)
+        val client = JevClient(prefs)
         val rel = prefs.relationship
         // Judgment is fast (~1s) — show it immediately.
         submit {
