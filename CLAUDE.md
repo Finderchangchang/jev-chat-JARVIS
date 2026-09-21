@@ -19,6 +19,7 @@
 - JDK 17（`H:\android\jdk`），Android SDK 在 `H:\android\sdk`，Gradle 缓存 `H:\android\gradle-home`
 - 目标机：小米 14（houji / 23127PN0CC），HyperOS 3.0 / Android 16 (SDK 36)，微信 8.0.78
 - 模型客户端分三路：`jev/JudgeClient`（判断）、`jev/ReplyClient`（回复）、`jev/VisionClient`（视觉，OCR 用），共用 `jev/HttpJson`；配置在 `core/Prefs`（`judge*` / `reply*` / `vision*` 字段），旧密钥一次性迁移，标记位 `prefs_migrated_v13`。
+- ML Kit `com.google.mlkit:text-recognition-chinese:16.0.1`（bundled，不是 play-services 版），`ndk.abiFilters` 只留 `arm64-v8a`。
 
 ## 关键背景（2026-09-21 实测结论，别重复踩）
 
@@ -37,6 +38,8 @@
 - Jev 主训练语言是英文：**题目的 instructions 和 criteria 用英文写，state 里的聊天内容保留中文原文。**
 - 知识库 / 上下文数据在 `filesDir/kb` 下的 JSON 文件（`notes.json` / `contacts.json` / `logs/<contactId>.json`）；`KbStore` 单锁 + 原子写（先写 `.tmp` 再 rename）。`ContextBuilder` 只做 alwaysOn 笔记全带 + 标签/标题包含匹配（不做语义检索、不打分），**不自动建档、历史默认关闭（`contextEnabled=false`）**。
 - Kotlin 字符串模板 `$x` 后面紧跟中文标点（如 `」`、`）`）会被解析成标识符的一部分，导致 `Unresolved reference` 编译错误；**一律写成 `${x}`**。D 阶段在 `KbStore.kt` / `KbSelfCheck.kt` 踩过。
+- OCR 层在 `capture/ocr`：`ScreenCapture` 限频 ≥1s + 失败退避（1s→2s→4s→8s→16s→30s 封顶），错误码 1/2/3/4/6 各给一句人话；`MlKitOcr` 用 bundled 中文模型。适配器契约：`extract` 返回 `null` = 不在聊天窗，返回空消息列表 = 在聊天窗但树里没正文——只有后者才触发 OCR 兜底。
+- 无障碍 XML 加了 `android:canTakeScreenshot="true"`，**改完必须把无障碍关掉再重新开启才生效**，否则 `takeScreenshot` 直接回 errorCode 2。伪装服务（`SelectToSpeakService`）在 HyperOS 上能不能截屏未验；被拒（码 1/2，重开无障碍后仍是）就另起一个不伪装的截屏专用服务，`ScreenCapture` 已按可换宿主的方式封装。
 
 ## 目录与文件锁
 
