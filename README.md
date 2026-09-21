@@ -123,6 +123,14 @@ adb install -r apk/jev-assistant-v1.1-release.apk
 
 项目刚起步，想听真实需求：你在哪个聊天 App 上最想要这个副驾？希望它判断什么、怎么提示、什么绝对不能碰？扫码进微信群直接说。
 
-<p align="center"><img src="docs/images/wechat-group.png" width="240" alt="微信群 jev-chat-JARVIS 二维码" /></p>
+**1 群已满。** 2、3、4 群任选一个扫码加入，**请勿重复加入**，内容完全一样。
 
-二维码 7 天有效（本张到 2026-09-28），过期了请开一个 [issue](https://github.com/Finderchangchang/jev-chat-JARVIS/issues) 留言，会更新。
+<p align="center">
+  <img src="docs/images/wechat-group-2.png" width="200" alt="jev-chat-JARVIS 2 群" />
+  &nbsp;&nbsp;
+  <img src="docs/images/wechat-group-3.png" width="200" alt="jev-chat-JARVIS 3 群" />
+  &nbsp;&nbsp;
+  <img src="docs/images/wechat-group-4.png" width="200" alt="jev-chat-JARVIS 4 群" />
+</p>
+
+二维码 7 天有效（本批到 2026-09-28），过期了请开一个 [issue](https://github.com/Finderchangchang/jev-chat-JARVIS/issues) 留言，会更新。
