@@ -1,10 +1,22 @@
 # Jev 聊天助手 (Jev Chat Assistant)
 
-一个挂在微信旁边的**非侵入式**聊天辅助器（Android）。它读取你当前打开的微信聊天，用 [TypeSafe **Jev**](https://typesafe.ai/) 判断模型给出「对方真实意图 / 危险等级 / 该不该马上回 / 最佳动作」，再用一个生成式模型起草 3 条候选回复并让 Jev 排序，最后以半透明悬浮窗展示，一键**填入**微信输入框。
+一个**非侵入式**的实时对话理解与回复辅助层——挂在任意聊天窗口旁边，读懂对方在说什么，用 [TypeSafe **Jev**](https://typesafe.ai/) 判断模型给出「对方真实意图 / 危险等级 / 该不该马上回 / 最佳动作」，再用一个生成式模型起草 3 条候选回复并让 Jev 排序，最后以半透明悬浮窗展示，一键**填入**输入框。
 
+> **目标是全平台。** 微信（Android）只是我们跑通可行性的第一站。核心不依赖任何 App 的接口或账号——它只读「当前屏幕上正在发生的对话」，所以同一套 Jev 判断 + 生成排序内核可以平移到其它 IM、桌面端、乃至任何有聊天的地方。
+>
 > **发送始终由你手动点。** 程序只读消息、只把回复填进输入框，从不自动发送、不碰转账/红包/收款。
 
-<p align="center"><em>An on-screen assistant for WeChat: it reads the open chat via an accessibility service, uses Jev for typed judgments plus a generative model for 3 ranked candidate replies, shows them in a translucent overlay, and fills the input box — you press send.</em></p>
+<p align="center"><em>A non-invasive, real-time conversation-understanding layer that sits beside any chat surface. It reads whatever conversation is on screen (no app integration, no account), uses Jev for typed judgments plus a generative model for 3 ranked candidate replies, shows them in a translucent overlay, and fills the input box — you press send. WeChat on Android is just the first platform we proved it on.</em></p>
+
+## 项目目标
+
+- **一层通用的「对话副驾」**：不是再造一个聊天软件，而是浮在你已在用的**任何**聊天之上的分析层。看得懂语义、给得出该怎么回，你保留最终决定权（只填入不发送、不碰转账/红包/收款）。
+- **非侵入 = 可跨平台的前提**：不 hook、不改包、不走对方 App 的 API，只从屏幕采集正在显示的对话。换平台换的只是「采集方式」，判断与生成内核不变：
+  - **Android 各类 App**：无障碍读屏（本仓库已实现，微信为例）
+  - **桌面端 / 控件树被隐藏的场景**：截图 + OCR/视觉提取文本
+  - 采集出的文本 → 同一个 **Jev 判断 + 生成模型起草 + Jev 排序** → 同一套悬浮窗展示
+- **已验证**：微信 Android 端（8.0.78 实测）——伪装无障碍服务读到聊天节点、Jev 判断 + DeepSeek 起草 + Jev 排序、悬浮窗填入，闭环打通。
+- **下一步**：把同一内核扩展到更多聊天平台（更多 IM / 桌面端 / 网页）。
 
 ## 它怎么工作
 
