@@ -1,13 +1,20 @@
 package com.jev.probe.capture
 
 import android.accessibilityservice.AccessibilityService
+import android.graphics.Bitmap
+import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.jev.probe.capture.ocr.MlKitOcr
+import com.jev.probe.capture.ocr.OcrLine
+import com.jev.probe.capture.ocr.ScreenCapture
+import com.jev.probe.core.BubbleRect
 import com.jev.probe.core.ChatSnapshot
+import com.jev.probe.core.Msg
 import com.jev.probe.core.Prefs
 import com.jev.probe.core.kb.ContextBuilder
 import com.jev.probe.core.kb.KbStore
@@ -54,6 +61,16 @@ open class ChatCaptureService : AccessibilityService() {
     @Volatile private var currentSnapshot: ChatSnapshot? = null
     private var foregroundPkg: String? = null
 
+    // ---- OCR path (B stage). Everything here runs on the main thread: the
+    // screenshot callback and the ML Kit callback are both posted back to it.
+    private val screenCapture by lazy {
+        ScreenCapture(this,
+            hideOverlay = { overlay?.setHiddenForShot(true) },
+            restoreOverlay = { overlay?.setHiddenForShot(false) })
+    }
+    private val ocr = MlKitOcr()
+    private var ocrBusy = false
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         prefs = Prefs(this)
@@ -74,6 +91,8 @@ open class ChatCaptureService : AccessibilityService() {
                 main.post { overlay?.toast(msg) }
             }
         }
+        // Bubble menu: one manual screenshot + OCR, for any app at all.
+        overlay?.onOcrCapture = { ocrCaptureManual() }
         // Keep the process at foreground importance so MIUI does not freeze us.
         runCatching { KeepAliveService.start(this) }
         // HyperOS may kill and restart us. On (re)connect, proactively re-show the
@@ -113,11 +132,21 @@ open class ChatCaptureService : AccessibilityService() {
     private fun maybeCapture() {
         val root = rootInActiveWindow ?: return
         val pkg = root.packageName?.toString()
+        // Apps with no adapter are never handled automatically (v1.3 revision):
+        // the only way in for them is the bubble menu's "截屏识别一次".
         val adapter = adapters[pkg] ?: return
         // Only act inside a chat window (the adapter returns null elsewhere).
         val snapshot = adapter.extract(root, resources) ?: return
-        if (snapshot.messages.isEmpty()) return
         if (!prefs.isAllowed(snapshot.title)) { main.post { overlay?.hide() }; return }
+        // In a chat window but the tree holds no text (Feishu draws its bodies,
+        // WeChat hides them when the disguise fails) → screenshot + OCR, subject
+        // to ScreenCapture's own >=1s throttle and failure backoff.
+        if (snapshot.messages.isEmpty()) {
+            if (prefs.ocrFallback) {
+                ocrCapture(snapshot.title, snapshot.bubbleRects, pkg ?: "", manual = false)
+            }
+            return
+        }
 
         // Switching to another adapted app resets the dedupe signature, so two apps
         // whose last few messages happen to match cannot swallow each other.
@@ -151,7 +180,7 @@ open class ChatCaptureService : AccessibilityService() {
         if (analyzing) return
         if (!prefs.hasKey()) { main.post { overlay?.showError("未设置判断接口密钥，去设置里填") }; return }
         analyzing = true
-        main.post { overlay?.showLoading() }
+        main.post { overlay?.showLoading(); overlay?.setNote(snapshot.note) }
         val client = JevClient(prefs)
         val rel = prefs.relationship
         val pkg = activePkg ?: ""
@@ -182,6 +211,159 @@ open class ChatCaptureService : AccessibilityService() {
                     overlay?.showReplies(ranked) { text -> fillInput(text) }
                 }
             }
+        }
+    }
+
+    // ------------------------------------------------------------------ OCR
+
+    /**
+     * Bubble menu → "截屏识别一次". Works on ANY app, adapted or not: one whole
+     * screen shot, every line OCR'd, lines grouped into pseudo-bubbles by line
+     * spacing. Nobody can tell who said what this way, so everything is filed as
+     * the other person and the panel says so.
+     */
+    private fun ocrCaptureManual() {
+        val root = rootInActiveWindow
+        val pkg = root?.packageName?.toString() ?: foregroundPkg ?: activePkg ?: ""
+        // Top bar text, if this app has one we can read; else the first OCR line.
+        val title = root?.let {
+            findTitleInActionBar(it, Int.MAX_VALUE, resources.displayMetrics.widthPixels, resources, 0.15, 0.85)
+        }
+        ocrCapture(title, emptyList(), pkg, manual = true)
+    }
+
+    /**
+     * Screenshot, then either OCR each known bubble rect (Feishu: the tree knows
+     * where the bubbles are and who sent them, just not what they say) or OCR
+     * the whole screen (everything else).
+     */
+    private fun ocrCapture(treeTitle: String?, rects: List<BubbleRect>, pkg: String, manual: Boolean) {
+        if (ocrBusy) return
+        ocrBusy = true
+        screenCapture.capture { res ->
+            when (res) {
+                is ScreenCapture.Result.Failed -> {
+                    ocrBusy = false
+                    Log.i(TAG, "ocr: screenshot failed code=${res.code}")
+                    // Throttle/interval codes are transient timing, not something
+                    // the user can act on — nagging about them would be constant.
+                    val transient = res.code == ScreenCapture.CODE_THROTTLED || res.code == 3
+                    if (manual || !transient) overlay?.showError(res.humanMessage)
+                }
+                is ScreenCapture.Result.Ok -> {
+                    ocr.scaleX = res.scaleX; ocr.scaleY = res.scaleY
+                    if (rects.isNotEmpty() && !manual) ocrByRects(res.bitmap, rects, treeTitle, pkg)
+                    else ocrWholeScreen(res.bitmap, treeTitle, pkg, manual)
+                }
+            }
+        }
+    }
+
+    /** One OCR pass per bubble rectangle; each rect becomes exactly one message. */
+    private fun ocrByRects(bmp: Bitmap, rects: List<BubbleRect>, title: String?, pkg: String) {
+        val sx = ocr.scaleX; val sy = ocr.scaleY
+        val out = arrayOfNulls<Msg>(rects.size)
+        var remaining = rects.size
+        rects.forEachIndexed { i, br ->
+            val region = Rect(
+                (br.rect.left * sx).toInt(), (br.rect.top * sy).toInt(),
+                (br.rect.right * sx).toInt(), (br.rect.bottom * sy).toInt())
+            ocr.recognize(bmp, region) { lines ->
+                val text = cleanBubbleText(lines.joinToString(" ") { it.text })
+                if (text.isNotEmpty()) out[i] = Msg(br.side, text)
+                remaining--
+                if (remaining == 0) {
+                    runCatching { bmp.recycle() }
+                    finishOcrSnapshot(ChatSnapshot(title, out.filterNotNull()), pkg, manual = false)
+                }
+            }
+        }
+    }
+
+    /** Whole screen minus the top bar and the input area, grouped by line gaps. */
+    private fun ocrWholeScreen(bmp: Bitmap, treeTitle: String?, pkg: String, manual: Boolean) {
+        val region = Rect(0, (bmp.height * TOP_CROP).toInt(), bmp.width, (bmp.height * BOTTOM_CROP).toInt())
+        ocr.recognize(bmp, region) { lines ->
+            runCatching { bmp.recycle() }
+            val msgs = groupOcrLines(lines)
+            val title = treeTitle?.takeIf { it.isNotBlank() }
+                ?: lines.firstOrNull()?.text?.trim()?.take(24)
+            finishOcrSnapshot(ChatSnapshot(title, msgs, note = OCR_NOTE), pkg, manual)
+        }
+    }
+
+    /**
+     * OCR lines → "bubbles": a gap larger than 1.2x the previous line's height
+     * starts a new one. Side is unknowable from a flat screen read, so every
+     * group is filed as the other person (and [OCR_NOTE] says so on the panel).
+     */
+    private fun groupOcrLines(lines: List<OcrLine>): List<Msg> {
+        val usable = lines
+            .filter { it.text.isNotBlank() && !PURE_TIME.matches(it.text.trim()) }
+            .sortedBy { it.bounds.top }
+        val out = ArrayList<Msg>()
+        val buf = StringBuilder()
+        var prev: OcrLine? = null
+        for (l in usable) {
+            val p = prev
+            if (p != null) {
+                val gap = l.bounds.top - p.bounds.bottom
+                val lineHeight = maxOf(p.bounds.height(), 1)
+                if (gap > lineHeight * 1.2f) {
+                    if (buf.isNotEmpty()) { out.add(Msg("other", buf.toString())); buf.setLength(0) }
+                }
+            }
+            if (buf.isNotEmpty()) buf.append(' ')
+            buf.append(l.text.trim())
+            prev = l
+        }
+        if (buf.isNotEmpty()) out.add(Msg("other", buf.toString()))
+        return out
+    }
+
+    /** Strip the read receipt and the timestamp Feishu glues onto a bubble. */
+    private fun cleanBubbleText(raw: String): String {
+        var t = raw.trim()
+        var changed = true
+        while (changed && t.isNotEmpty()) {
+            changed = false
+            for (tail in arrayOf("已读", "未读")) {
+                if (t.endsWith(tail)) { t = t.removeSuffix(tail).trim(); changed = true }
+            }
+            TAIL_TIME.find(t)?.let { t = t.substring(0, it.range.first).trim(); changed = true }
+        }
+        return t
+    }
+
+    /** Shared tail of both OCR paths: dedupe, then analyze or park the bubble. */
+    private fun finishOcrSnapshot(snapshot: ChatSnapshot, pkg: String, manual: Boolean) {
+        ocrBusy = false
+        // Counts only — OCR'd chat text never goes to logcat.
+        Log.i(TAG, "ocr[$pkg] msgs=${snapshot.messages.size} manual=$manual")
+        if (snapshot.messages.isEmpty()) {
+            if (manual) overlay?.showError("这一屏没认出文字")
+            return
+        }
+        if (!prefs.isAllowed(snapshot.title)) { overlay?.hide(); return }
+
+        if (pkg.isNotEmpty() && pkg != activePkg) { activePkg = pkg; lastSignature = "" }
+        currentSnapshot = snapshot
+        val sig = snapshot.signature()
+        // Manual taps always re-run; the automatic path dedupes like the tree path.
+        if (!manual && sig == lastSignature) {
+            if (overlay?.isShowing() != true) overlay?.showIdle(snapshot.title)
+            return
+        }
+        lastSignature = sig
+
+        val auto = prefs.ocrAutoAnalyze && prefs.autoAnalyze && snapshot.latestFrom == "other"
+        if (manual || auto) {
+            pendingSnapshot = snapshot
+            main.removeCallbacks(debounce)
+            runAnalysis()
+        } else {
+            overlay?.setNote(snapshot.note)
+            overlay?.showIdle(snapshot.title)
         }
     }
 
@@ -275,6 +457,7 @@ open class ChatCaptureService : AccessibilityService() {
         // never call back into this dead instance.
         overlay?.onManualAnalyze = null
         overlay?.onSaveContact = null
+        overlay?.onOcrCapture = null
         overlay?.hide()
         overlay = null
         worker.shutdownNow()
@@ -282,5 +465,15 @@ open class ChatCaptureService : AccessibilityService() {
 
     companion object {
         private const val TAG = "JEVASSIST"
+
+        /** Whole-screen OCR keeps the middle: no action bar, no input area. */
+        private const val TOP_CROP = 0.12f
+        private const val BOTTOM_CROP = 0.84f
+
+        /** Said on the panel whenever a snapshot came from flat-screen OCR. */
+        private const val OCR_NOTE = "OCR 未分边，把全部消息当作对方所说"
+
+        private val PURE_TIME = Regex("""\d{1,2}[:：]\d{2}""")
+        private val TAIL_TIME = Regex("""\d{1,2}[:：]\d{2}$""")
     }
 }

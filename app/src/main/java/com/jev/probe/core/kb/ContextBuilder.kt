@@ -82,8 +82,12 @@ object ContextBuilder {
             .filter { it.text.length >= DEDUPE_MIN_LEN }
             .map { it.side + " " + it.text }
             .toHashSet()
-        return store.recentLog(contact.id, n)
+        // Filter the widest window FIRST, then take n. The other order lets the
+        // messages currently on screen eat into the quota — ask for 30 lines of
+        // history, get 30 minus however many are already visible.
+        return store.recentLog(contact.id, KbStore.MAX_LOG)
             .filter { (it.side + " " + it.text) !in onScreen }
+            .takeLast(n)
     }
 
     /**

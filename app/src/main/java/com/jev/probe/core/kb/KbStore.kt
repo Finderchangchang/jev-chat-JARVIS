@@ -41,18 +41,23 @@ class KbStore private constructor(context: Context) {
 
     fun note(id: String): Note? = synchronized(lock) { loadNotes().firstOrNull { it.id == id } }
 
-    /** Insert or replace by id. */
-    fun saveNote(note: Note) = synchronized(lock) {
+    /** Insert or replace by id. Returns false when it did not reach disk. */
+    fun saveNote(note: Note): Boolean = synchronized(lock) {
         val list = loadNotes()
         val i = list.indexOfFirst { it.id == note.id }
         val stamped = note.copy(updatedAt = System.currentTimeMillis())
         if (i >= 0) list[i] = stamped else list.add(stamped)
-        writeAtomic(notesFile, notesJson(list))
+        val ok = writeAtomic(notesFile, notesJson(list))
+        if (!ok) notesCache = null   // memory must not claim a write that failed
+        ok
     }
 
-    fun deleteNote(id: String) = synchronized(lock) {
+    fun deleteNote(id: String): Boolean = synchronized(lock) {
         val list = loadNotes()
-        if (list.removeAll { it.id == id }) writeAtomic(notesFile, notesJson(list))
+        if (!list.removeAll { it.id == id }) return@synchronized true
+        val ok = writeAtomic(notesFile, notesJson(list))
+        if (!ok) notesCache = null
+        ok
     }
 
     // --------------------------------------------------------------- contacts
@@ -61,21 +66,27 @@ class KbStore private constructor(context: Context) {
 
     fun contact(id: String): Contact? = synchronized(lock) { loadContacts().firstOrNull { it.id == id } }
 
-    fun saveContact(c: Contact) = synchronized(lock) {
+    fun saveContact(c: Contact): Boolean = synchronized(lock) {
         val list = loadContacts()
         val i = list.indexOfFirst { it.id == c.id }
         val stamped = c.copy(updatedAt = System.currentTimeMillis())
         if (i >= 0) list[i] = stamped else list.add(stamped)
-        writeAtomic(contactsFile, contactsJson(list))
+        val ok = writeAtomic(contactsFile, contactsJson(list))
+        if (!ok) contactsCache = null
+        ok
     }
 
     /** Removes the contact and its history file. */
-    fun deleteContact(id: String) = synchronized(lock) {
+    fun deleteContact(id: String): Boolean = synchronized(lock) {
         val list = loadContacts()
-        if (list.removeAll { it.id == id }) writeAtomic(contactsFile, contactsJson(list))
+        var ok = true
+        if (list.removeAll { it.id == id }) {
+            ok = writeAtomic(contactsFile, contactsJson(list))
+            if (!ok) contactsCache = null
+        }
         logCache.remove(id)
         runCatching { logFile(id).delete() }
-        Unit
+        ok
     }
 
     /**
@@ -130,25 +141,38 @@ class KbStore private constructor(context: Context) {
     // ---------------------------------------------------------------- history
 
     /**
-     * Append entries not already present, keeping only the newest [MAX_LOG].
-     * Dedupe key is (side, text), so re-reading the same screen over and over
-     * does not grow the file.
+     * Append the visible messages, keeping only the newest [MAX_LOG].
+     *
+     * Dedupe is deliberately NARROW: an incoming line is skipped only when the
+     * same (side, text) is already sitting in the recent tail — i.e. this screen
+     * was captured a moment ago — and only when it is long enough
+     * ([DEDUPE_MIN_LEN]+) for an exact repeat to certainly be the same message.
+     * Deduping against the whole 300-line history would erase the fact that
+     * someone really did say the same thing twice. The cost of the narrow rule:
+     * short lines ("嗯", "好的") can be recorded again on a re-capture.
      */
-    fun appendLog(contactId: String, entries: List<LogEntry>) {
-        if (entries.isEmpty()) return
+    fun appendLog(contactId: String, entries: List<LogEntry>): Boolean {
+        if (entries.isEmpty()) return true
         synchronized(lock) {
             val list = loadLog(contactId)
-            val seen = HashSet<String>(list.size * 2)
-            list.forEach { seen.add(key(it.side, it.text)) }
+            val window = maxOf(entries.size * 3, MIN_DEDUPE_WINDOW)
+            val seen = HashSet<String>(window * 2)
+            for (i in maxOf(0, list.size - window) until list.size) {
+                val e = list[i]
+                if (e.text.length >= DEDUPE_MIN_LEN) seen.add(key(e.side, e.text))
+            }
             var added = 0
             for (e in entries) {
                 if (e.text.isBlank()) continue
-                if (seen.add(key(e.side, e.text))) { list.add(e); added++ }
+                if (e.text.length >= DEDUPE_MIN_LEN && !seen.add(key(e.side, e.text))) continue
+                list.add(e); added++
             }
-            if (added == 0) return
+            if (added == 0) return true
             while (list.size > MAX_LOG) list.removeAt(0)
-            writeAtomic(logFile(contactId), logJson(list))
-            Log.d(TAG, "appendLog contact=$contactId added=$added total=${list.size}")
+            val ok = writeAtomic(logFile(contactId), logJson(list))
+            if (!ok) logCache.remove(contactId)
+            Log.d(TAG, "appendLog contact=$contactId added=$added total=${list.size} ok=$ok")
+            return ok
         }
     }
 
@@ -197,7 +221,8 @@ class KbStore private constructor(context: Context) {
     private fun loadNotes(): MutableList<Note> {
         notesCache?.let { return it }
         val list = ArrayList<Note>()
-        readJsonArray(notesFile)?.let { arr ->
+        val loaded = readJsonArray(notesFile)
+        loaded.arr?.let { arr ->
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 list.add(Note(
@@ -211,14 +236,15 @@ class KbStore private constructor(context: Context) {
                 ))
             }
         }
-        notesCache = list
+        if (loaded.trustworthy) notesCache = list
         return list
     }
 
     private fun loadContacts(): MutableList<Contact> {
         contactsCache?.let { return it }
         val list = ArrayList<Contact>()
-        readJsonArray(contactsFile)?.let { arr ->
+        val loaded = readJsonArray(contactsFile)
+        loaded.arr?.let { arr ->
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 list.add(Contact(
@@ -233,14 +259,15 @@ class KbStore private constructor(context: Context) {
                 ))
             }
         }
-        contactsCache = list
+        if (loaded.trustworthy) contactsCache = list
         return list
     }
 
     private fun loadLog(contactId: String): MutableList<LogEntry> {
         logCache[contactId]?.let { return it }
         val list = ArrayList<LogEntry>()
-        readJsonArray(logFile(contactId))?.let { arr ->
+        val loaded = readJsonArray(logFile(contactId))
+        loaded.arr?.let { arr ->
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 list.add(LogEntry(
@@ -251,7 +278,7 @@ class KbStore private constructor(context: Context) {
                 ))
             }
         }
-        logCache[contactId] = list
+        if (loaded.trustworthy) logCache[contactId] = list
         return list
     }
 
@@ -298,26 +325,63 @@ class KbStore private constructor(context: Context) {
         return arr.toString()
     }
 
-    private fun readJsonArray(f: File): JSONArray? = try {
-        if (!f.exists()) null else JSONArray(f.readText(Charsets.UTF_8))
-    } catch (e: Exception) {
-        Log.w(TAG, "unreadable ${f.name}: ${e.javaClass.simpleName}")
-        null
+    /**
+     * Result of reading one JSON file. [trustworthy] is false only in the one
+     * nasty case: the file exists, does not parse, AND could not be moved aside
+     * — then an empty list is a guess, so it must not be cached and must not be
+     * written over the user's data.
+     */
+    private class Loaded(val arr: JSONArray?, val trustworthy: Boolean)
+
+    /** Files that failed to parse and could not be preserved; never overwrite. */
+    private val unreadable = HashSet<String>()
+
+    private fun readJsonArray(f: File): Loaded {
+        if (!f.exists()) { unreadable.remove(f.absolutePath); return Loaded(null, true) }
+        return try {
+            val arr = JSONArray(f.readText(Charsets.UTF_8))
+            unreadable.remove(f.absolutePath)
+            Loaded(arr, true)
+        } catch (e: Exception) {
+            // Damaged file: set it aside under a dated name rather than let the
+            // next save silently write over it. Starting empty is only safe once
+            // the original is actually preserved.
+            val backup = File(f.parentFile, "${f.name}.corrupt.${System.currentTimeMillis()}")
+            val kept = runCatching { f.renameTo(backup) }.getOrDefault(false)
+            if (kept) unreadable.remove(f.absolutePath) else unreadable.add(f.absolutePath)
+            Log.w(TAG, "unreadable ${f.name}: ${e.javaClass.simpleName} preserved=$kept")
+            Loaded(null, kept)
+        }
     }
 
-    /** Temp file + rename, so a crash never leaves a half-written document. */
-    private fun writeAtomic(f: File, text: String) {
-        try {
+    /**
+     * Temp file + rename, so a crash never leaves a half-written document.
+     *
+     * The rename REPLACES the destination in one step (POSIX semantics, same
+     * directory) — deleting the old file first would mean a kill in between
+     * loses everything. Returns false when the data did not reach disk; callers
+     * drop their cache so the next read goes back to the file.
+     */
+    private fun writeAtomic(f: File, text: String): Boolean {
+        if (f.absolutePath in unreadable) {
+            Log.w(TAG, "refusing to overwrite unparsable ${f.name}")
+            return false
+        }
+        val tmp = File(f.parentFile, f.name + ".tmp")
+        return try {
             f.parentFile?.mkdirs()
-            val tmp = File(f.parentFile, f.name + ".tmp")
             tmp.writeText(text, Charsets.UTF_8)
-            if (f.exists()) f.delete()
-            if (!tmp.renameTo(f)) {
-                f.writeText(text, Charsets.UTF_8)
-                tmp.delete()
-            }
+            if (tmp.renameTo(f)) return true
+            // Same-directory rename should not fail. If it somehow does, an
+            // in-place overwrite is the only way left — not atomic, so say so.
+            Log.w(TAG, "rename failed, overwriting ${f.name} in place")
+            f.writeText(text, Charsets.UTF_8)
+            runCatching { tmp.delete() }
+            true
         } catch (e: Exception) {
+            runCatching { tmp.delete() }
             Log.w(TAG, "write failed ${f.name}: ${e.javaClass.simpleName}")
+            false
         }
     }
 
@@ -336,6 +400,12 @@ class KbStore private constructor(context: Context) {
     companion object {
         private const val TAG = "JEVASSIST"
         const val MAX_LOG = 300
+
+        /** Shorter lines are too common to dedupe on. Matches ContextBuilder. */
+        const val DEDUPE_MIN_LEN = 4
+
+        /** Tail of the history compared against an incoming screen. */
+        private const val MIN_DEDUPE_WINDOW = 30
 
         @Volatile private var instance: KbStore? = null
 

@@ -52,9 +52,15 @@ class OverlayController(private val ctx: Context) {
     /** Bubble menu → file the open conversation as a knowledge-base contact. */
     var onSaveContact: (() -> Unit)? = null
 
+    /** Bubble menu → one manual screenshot + OCR of whatever app is open. */
+    var onOcrCapture: (() -> Unit)? = null
+
     /** How much knowledge context the last analysis actually used. */
     private var ctxNotes = 0
     private var ctxHistory = 0
+
+    /** A caveat about how the current snapshot was captured (OCR mode). */
+    private var noteText: String? = null
 
     /** Whether the overlay window is currently on screen. */
     fun isShowing(): Boolean = root != null
@@ -230,6 +236,7 @@ class OverlayController(private val ctx: Context) {
             setPadding(dp(4), dp(4), dp(4), dp(4))
             layoutParams = FrameLayout.LayoutParams(dp(196), ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(56) }
         }
+        menu.addView(menuItem("截屏识别一次") { root?.removeView(menu); onOcrCapture?.invoke() })
         menu.addView(menuItem("把当前会话存为联系人") { onSaveContact?.invoke(); root?.removeView(menu) })
         menu.addView(menuItem("打开设置") { openSettings(); root?.removeView(menu) })
         menu.addView(menuItem("隐藏助手（本次）") { hide() })
@@ -301,6 +308,19 @@ class OverlayController(private val ctx: Context) {
         ctxNotes = notes; ctxHistory = history
     }
 
+    /** A caveat line for the panel (OCR mode); null clears it. */
+    fun setNote(note: String?) {
+        noteText = note
+    }
+
+    /**
+     * Take the overlay out of the picture for one screenshot. INVISIBLE, not
+     * removed: the window (and everything on it) must survive the round trip.
+     */
+    fun setHiddenForShot(hidden: Boolean) {
+        root?.visibility = if (hidden) View.INVISIBLE else View.VISIBLE
+    }
+
     fun showError(msg: String) {
         ensureRoot(); bubble?.alpha = 1f
         setContent(listOf(
@@ -344,6 +364,9 @@ class OverlayController(private val ctx: Context) {
         views.add(hint(
             if (ctxNotes == 0 && ctxHistory == 0) "未用知识库"
             else "知识库 $ctxNotes 条 · 历史 $ctxHistory 条"))
+
+        // How this snapshot was captured, when it changes how to read it.
+        noteText?.let { if (it.isNotBlank()) views.add(hint(it)) }
 
         // Danger badge — the alarm signal, up top and color-coded.
         a.dangerLevel?.let {

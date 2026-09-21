@@ -119,6 +119,11 @@ class SettingsActivity : AppCompatActivity() {
             if (provider == Prefs.PROVIDER_CUSTOM && base.isBlank()) {
                 judgeResult.text = "自定义档要填完整 URL（带路径）"; return@cardBtn
             }
+            // Custom means we know nothing about the endpoint — guessing a model
+            // name here would test something the user never asked for.
+            if (provider == Prefs.PROVIDER_CUSTOM && model.isBlank()) {
+                judgeResult.text = "请填写模型名"; return@cardBtn
+            }
             val probe = draftPrefs(SCRATCH_JUDGE) {
                 judgeProvider = provider
                 judgeBaseUrl = base.ifBlank { defaultJudgeBase(provider) }
@@ -268,6 +273,14 @@ class SettingsActivity : AppCompatActivity() {
         val autoRow = toggleRow("对方发消息时自动分析", prefs.autoAnalyze)
         card2.addView(autoRow)
 
+        // --- OCR 兜底（B 阶段）---
+        val ocrFallbackRow = toggleRow("树读不到正文时用 OCR 兜底", prefs.ocrFallback)
+        card2.addView(ocrFallbackRow)
+        card2.addView(text("飞书正文是画上去的、微信伪装失效时也读不到，这时截一次屏本地识别（不上传）。", 11f, sub))
+        val ocrAutoRow = toggleRow("OCR 模式自动分析", prefs.ocrAutoAnalyze)
+        card2.addView(ocrAutoRow)
+        card2.addView(text("关闭时 OCR 认完只亮悬浮球，点一下再分析。", 11f, sub))
+
         // --- 知识库 / 关联上下文（D 阶段） ---
         val ctxRow = toggleRow("记录聊天历史（只存本机，用于关联上下文）", prefs.contextEnabled)
         card2.addView(ctxRow)
@@ -363,6 +376,8 @@ class SettingsActivity : AppCompatActivity() {
             prefs.whitelist = wlEdit.text.toString().split("\n")
                 .map { it.trim() }.filter { it.isNotEmpty() }.toSet()
             prefs.autoAnalyze = (autoRow.tag as? Boolean) ?: true
+            prefs.ocrFallback = (ocrFallbackRow.tag as? Boolean) ?: true
+            prefs.ocrAutoAnalyze = (ocrAutoRow.tag as? Boolean) ?: false
             prefs.contextEnabled = (ctxRow.tag as? Boolean) ?: false
             prefs.contextHistoryCount =
                 ctxCountEdit.text.toString().trim().toIntOrNull()?.coerceIn(0, 100) ?: 30
