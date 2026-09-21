@@ -60,6 +60,14 @@
 
 先用 `adb shell uiautomator dump` 看目标 App 暴露了哪些节点：像微信这样混淆节点的，要靠伪装服务才看得到；像飞书这样正文自绘的，正文要另走 OCR。
 
+## 交流群 / 需求收集
+
+项目刚起步，想听真实需求：你在哪个聊天 App 上最想要这个副驾？希望它判断什么、怎么提示、什么绝对不能碰？扫码进微信群直接说。
+
+<p align="center"><img src="docs/images/wechat-group.png" width="240" alt="微信群 jev-chat-JARVIS 二维码" /></p>
+
+二维码 7 天有效（本张到 2026-09-28），过期了请开一个 [issue](https://github.com/Finderchangchang/jev-chat-JARVIS/issues) 留言，会更新。
+
 ## 下载安装
 
 不想自己编译，直接装仓库里编好的包：[`apk/jev-assistant-v1.0-debug.apk`](apk/jev-assistant-v1.0-debug.apk)（2026-09-21 构建，debug 签名，Android 11+）。
