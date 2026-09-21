@@ -25,6 +25,8 @@
 - 社区绕法：把无障碍服务的类名注册成系统内置的 `com.google.android.accessibility.selecttospeak.SelectToSpeakService`。**对 8.0.78 是否仍有效未验证，这就是探针 App 要回答的问题。**
 - 兜底路线：无障碍服务的 `takeScreenshot()` + 本地 OCR（ML Kit），同样零 token。
 - 飞书 Android（2026-09-21 实测）：消息正文自绘，无障碍树里**没有文字**（伪装服务与 `uiautomator dump` 一致），只有 `bubble_content_container` 气泡位置、`group_name` 标题、`kb_rich_text_content` 输入框；正文要走 takeScreenshot + OCR。飞书默认左对齐布局，我/对方不能按左右判。
+- 手机 QQ 9.3.50（2026-09-21 实测，小米 14 / 1200×2670）：节点**不混淆**，普通 `uiautomator dump` 即可读。消息正文 `com.tencent.mobileqq:id/mjn`（TextView，text 即正文），群昵称 `id/mjq`，标题 `id/371`，输入框 `id/input`，发送按钮 `id/send_btn`（**绝不 performAction**）。时间戳与系统提示条无 id，只采 `id/mjn` 就自然排除。
+- QQ 全程是 `SplashActivity`（fragment 架构），**不能按 activity 判断是否在聊天窗**，只能看树里有没有 `id/mjn` / `id/input`。头像贴各自外侧（别人 left≈width×0.13，自己 right≈width−width×0.13），判「我/对方」要比左右两边离头像列的距离，不能用中心点（长消息中心会过半屏）。
 - 采集层按 App 分发：`capture/ChatAppAdapter.kt` 一个 App 一个适配器，`ChatCaptureService` 按前台包名查表；下游通用。
 - Jev = TypeSafe 的判断模型，只回答选择题/打分/是非，不生成文字。走 OpenRouter：
   `POST https://openrouter.ai/api/alpha/decisions`，model `typesafe/jev-1.13`，
