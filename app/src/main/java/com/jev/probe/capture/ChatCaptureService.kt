@@ -137,7 +137,7 @@ open class ChatCaptureService : AccessibilityService() {
         if (!prefs.hasKey()) { main.post { overlay?.showError("未设置 OpenRouter 密钥，去设置里填") }; return }
         analyzing = true
         main.post { overlay?.showLoading() }
-        val client = JevClient(prefs.openRouterKey, prefs.replyModel)
+        val client = JevClient(prefs.openRouterKey, prefs.replyModel, prefs.apiBaseUrl)
         val rel = prefs.relationship
         // Judgment is fast (~1s) — show it immediately.
         submit {

@@ -14,6 +14,8 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
+import android.widget.Spinner
+import android.widget.ArrayAdapter
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -50,16 +52,60 @@ class SettingsActivity : AppCompatActivity() {
         scroll.addView(root)
 
         root.addView(header("设置"))
+        val result = text("", 13f, sub).apply { setPadding(0, dp(12), 0, dp(4)) }
 
         // --- 接口 ---
         root.addView(section("接口"))
         val card1 = card()
+        card1.addView(label("API 基础地址"))
+        val apiBaseEdit = edit(prefs.apiBaseUrl, Prefs.DEFAULT_API_BASE_URL)
+        card1.addView(apiBaseEdit)
+        card1.addView(text("自动请求：/alpha/decisions 和 /v1/chat/completions", 12f, sub))
         card1.addView(label("OpenRouter 密钥"))
         val keyEdit = edit(prefs.openRouterKey, "sk-or-v1-...", password = true)
         card1.addView(keyEdit)
         card1.addView(label("回复生成模型"))
         val modelEdit = edit(prefs.replyModel, Prefs.DEFAULT_REPLY_MODEL)
         card1.addView(modelEdit)
+        val modelSpinner = Spinner(this)
+        val modelAdapter = ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, mutableListOf("先点击“拉取模型列表”"))
+        modelSpinner.adapter = modelAdapter
+        modelSpinner.setSelection(0)
+        modelSpinner.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                val selected = modelAdapter.getItem(position).orEmpty()
+                if (selected.isNotBlank() && !selected.startsWith("先点击")) modelEdit.setText(selected)
+            }
+        })
+        card1.addView(modelSpinner)
+        val fetchModelsBtn = secondaryBtn("拉取模型列表") {
+            val key = keyEdit.text.toString().trim()
+            val apiBaseUrl = apiBaseEdit.text.toString().trim().ifBlank { Prefs.DEFAULT_API_BASE_URL }
+            if (key.isBlank()) { result.text = "请先填密钥"; return@secondaryBtn }
+            result.text = "正在拉取模型列表…"
+            worker.execute {
+                try {
+                    val models = JevClient(key, modelEdit.text.toString().trim().ifBlank { Prefs.DEFAULT_REPLY_MODEL }, apiBaseUrl).listModels()
+                    main.post {
+                        modelAdapter.clear()
+                        if (models.isEmpty()) {
+                            modelAdapter.add("未返回模型，请检查地址和权限")
+                            result.text = "未找到模型"
+                        } else {
+                            modelAdapter.addAll(models)
+                            modelAdapter.notifyDataSetChanged()
+                            val selected = models.indexOf(modelEdit.text.toString().trim()).coerceAtLeast(0)
+                            modelSpinner.setSelection(selected)
+                            result.text = "已拉取 ${models.size} 个模型"
+                        }
+                    }
+                } catch (e: Exception) {
+                    main.post { result.text = "拉取失败：${e.message ?: e.javaClass.simpleName}" }
+                }
+            }
+        }
+        card1.addView(fetchModelsBtn)
         root.addView(card1)
 
         // --- 分析 ---
@@ -97,8 +143,8 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(card3)
 
         // --- Actions ---
-        val result = text("", 13f, sub).apply { setPadding(0, dp(12), 0, dp(4)) }
         root.addView(primaryBtn("保存") {
+            prefs.apiBaseUrl = apiBaseEdit.text.toString().ifBlank { Prefs.DEFAULT_API_BASE_URL }
             prefs.openRouterKey = keyEdit.text.toString()
             prefs.replyModel = modelEdit.text.toString().ifBlank { Prefs.DEFAULT_REPLY_MODEL }
             prefs.relationship = relEdit.text.toString().ifBlank { Prefs.DEFAULT_REL }
@@ -110,12 +156,13 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(secondaryBtn("连通测试") {
             val key = keyEdit.text.toString().trim()
             val model = modelEdit.text.toString().trim().ifBlank { Prefs.DEFAULT_REPLY_MODEL }
+            val apiBaseUrl = apiBaseEdit.text.toString().trim().ifBlank { Prefs.DEFAULT_API_BASE_URL }
             if (key.isBlank()) { result.text = "请先填密钥"; return@secondaryBtn }
             result.text = "测试中…"
             worker.execute {
                 val demo = ChatSnapshot("连通测试", listOf(
                     Msg("other", "在吗？"), Msg("me", "在"), Msg("other", "那你说说昨天答应我的事")))
-                val a = JevClient(key, model).analyze(demo, prefs.relationship)
+                val a = JevClient(key, model, apiBaseUrl).analyze(demo, prefs.relationship)
                 main.post {
                     result.text = if (a.error != null) "失败：${a.error}"
                     else "成功：意图=${a.trueIntent?.choice ?: "?"}，候选=${a.rankedReplies.size} 条，耗时 ${a.latencyMs}ms"

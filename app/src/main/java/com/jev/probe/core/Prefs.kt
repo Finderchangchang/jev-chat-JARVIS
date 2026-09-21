@@ -14,6 +14,10 @@ class Prefs(context: Context) {
 
     private val sp = context.getSharedPreferences("jev_assistant", Context.MODE_PRIVATE)
 
+    var apiBaseUrl: String
+        get() = sp.getString(K_API_BASE_URL, DEFAULT_API_BASE_URL)?.trim()?.trimEnd('/') ?: DEFAULT_API_BASE_URL
+        set(v) = sp.edit().putString(K_API_BASE_URL, v.trim().trimEnd('/')).apply()
+
     var openRouterKey: String
         get() = sp.getString(K_KEY, "") ?: ""
         set(v) = sp.edit().putString(K_KEY, v.trim()).apply()
@@ -71,6 +75,7 @@ class Prefs(context: Context) {
     fun hasKey(): Boolean = openRouterKey.isNotBlank()
 
     companion object {
+        private const val K_API_BASE_URL = "api_base_url"
         private const val K_KEY = "openrouter_key"
         private const val K_REPLY_MODEL = "reply_model"
         private const val K_REL = "relationship"
@@ -83,6 +88,7 @@ class Prefs(context: Context) {
 
         // Reply drafting model on OpenRouter. DeepSeek is region-available in CN,
         // strong in Chinese, and cheap (Gemini/OpenAI are region-blocked here).
+        const val DEFAULT_API_BASE_URL = "https://openrouter.ai/api"
         const val DEFAULT_REPLY_MODEL = "deepseek/deepseek-chat-v3.1"
         const val DEFAULT_REL = "对方是我的伴侣；from=me 的是我发的，from=other 的是对方发的"
     }

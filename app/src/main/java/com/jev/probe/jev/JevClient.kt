@@ -15,26 +15,43 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Talks to OpenRouter: one generative call to draft 3 candidate replies, then a
+ * Talks to an OpenRouter-compatible API: one generative call to draft 3 candidate replies, then a
  * single Jev "decisions" call carrying all 7 judgment questions plus the ranking
  * question (speculative fan-out). Uses HttpURLConnection only (no deps).
  *
  * The key is passed in per call; it is never logged.
  */
-class JevClient(private val key: String, private val replyModel: String) {
+class JevClient(private val key: String, private val replyModel: String, apiBaseUrl: String) {
 
-    private val decisionsUrl = "https://openrouter.ai/api/alpha/decisions"
-    private val chatUrl = "https://openrouter.ai/api/v1/chat/completions"
+    private val apiBaseUrl = apiBaseUrl.trim().trimEnd('/')
+    private val hasV1Path = apiBaseUrl.endsWith("/v1", ignoreCase = true)
+    private val modelsUrl = if (hasV1Path) "$apiBaseUrl/models" else "$apiBaseUrl/v1/models"
+    private val chatUrl = if (hasV1Path) "$apiBaseUrl/chat/completions" else "$apiBaseUrl/v1/chat/completions"
 
-    /** The 7 judgment questions only (fast, ~1s). No candidate generation. */
+    /** Fetch model IDs from an OpenAI-compatible /v1/models endpoint. */
+    fun listModels(): List<String> {
+        val data = getJson(modelsUrl).optJSONArray("data") ?: return emptyList()
+        return buildList {
+            for (i in 0 until data.length()) {
+                val id = data.optJSONObject(i)?.optString("id")?.trim().orEmpty()
+                if (id.isNotEmpty()) add(id)
+            }
+        }.distinct().sorted()
+    }
+
+    /** Analyze using the standard OpenAI-compatible chat completions endpoint. */
     fun judge(snapshot: ChatSnapshot, relationship: String): Analysis {
         val start = System.currentTimeMillis()
         try {
-            val body = JSONObject()
-                .put("model", "typesafe/jev-1.13")
-                .put("state", JevQuestions.buildState(snapshot, relationship))
-                .put("questions", JevQuestions.judge())
-            val answers = postJson(decisionsUrl, body).optJSONObject("answers") ?: JSONObject()
+            val state = JevQuestions.buildState(snapshot, relationship)
+            val questions = JevQuestions.judge()
+            val system = "You are a conversation analysis assistant. Return ONLY valid JSON, with no markdown. " +
+                "Use the question criteria to classify the chat. JSON keys: " +
+                "true_intent, danger_level, she_needs, should_reply_now, best_action, tension_resolved, literal_question. " +
+                "Choice values are objects {choice, confidence, probabilities}; score values are objects {score, confidence, legend}. " +
+                "For noul values return {noul: 0.0} or {noul: 1.0}."
+            val user = "STATE:\n$state\n\nQUESTIONS:\n$questions"
+            val answers = chatJson(replyModel, system, user)
             return Analysis(
                 trueIntent = parseChoice(answers.optJSONObject("true_intent")),
                 dangerLevel = parseScore(answers.optJSONObject("danger_level")),
@@ -43,8 +60,7 @@ class JevClient(private val key: String, private val replyModel: String) {
                 bestAction = parseChoice(answers.optJSONObject("best_action")),
                 tensionResolved = answers.optJSONObject("tension_resolved")?.optDouble("noul"),
                 literalQuestion = answers.optJSONObject("literal_question")?.optDouble("noul"),
-                rankedReplies = emptyList(),
-                latencyMs = System.currentTimeMillis() - start
+                rankedReplies = emptyList(), latencyMs = System.currentTimeMillis() - start
             )
         } catch (e: Exception) {
             Log.w(TAG, "judge failed: ${e.message}")
@@ -56,14 +72,14 @@ class JevClient(private val key: String, private val replyModel: String) {
     /** Draft 3 candidate replies (generative model) then Jev-rank them. Slower. */
     fun draftAndRank(snapshot: ChatSnapshot, relationship: String): List<RankedReply> {
         val candidates = generateCandidates(snapshot, relationship)
-        val questions = JSONObject().put("best_reply",
-            JevQuestions.rankQuestion(candidates).getJSONObject("best_reply"))
-        val body = JSONObject()
-            .put("model", "typesafe/jev-1.13")
-            .put("state", JevQuestions.buildState(snapshot, relationship))
-            .put("questions", questions)
-        val answers = postJson(decisionsUrl, body).optJSONObject("answers") ?: JSONObject()
-        return parseRanked(answers.optJSONObject("best_reply"), candidates)
+        val system = "You rank candidate replies for a chat. Return ONLY valid JSON with " +
+            "best_reply: {probabilities: {reply_a: number, reply_b: number, reply_c: number}}. " +
+            "Probabilities must be between 0 and 1 and sum approximately to 1."
+        val user = "STATE:\n${JevQuestions.buildState(snapshot, relationship)}\n\nCANDIDATES:\n" +
+            candidates.mapIndexed { i, v -> "reply_${('a'.code + i).toChar()}: $v" }.joinToString("\n") +
+            "\n\nQUESTION:\n${JevQuestions.rankQuestion(candidates)}"
+        val answer = chatJson(replyModel, system, user).optJSONObject("best_reply")
+        return parseRanked(answer, candidates)
     }
 
     /** Convenience for the settings connectivity test: judge + replies, sequential. */
@@ -140,6 +156,42 @@ class JevClient(private val key: String, private val replyModel: String) {
             RankedReply(text, probs?.optDouble(keys.getOrElse(i) { "" }, 0.0) ?: 0.0)
         }
         return list.sortedByDescending { it.prob }
+    }
+
+    private fun chatJson(model: String, system: String, user: String): JSONObject {
+        val messages = JSONArray()
+            .put(JSONObject().put("role", "system").put("content", system))
+            .put(JSONObject().put("role", "user").put("content", user))
+        val body = JSONObject().put("model", model).put("messages", messages).put("temperature", 0.2)
+        val resp = postJson(chatUrl, body)
+        val content = resp.optJSONArray("choices")?.optJSONObject(0)
+            ?.optJSONObject("message")?.optString("content").orEmpty()
+        val start = content.indexOf('{')
+        val end = content.lastIndexOf('}')
+        if (start < 0 || end <= start) throw RuntimeException("模型未返回 JSON")
+        return JSONObject(content.substring(start, end + 1))
+    }
+
+    private fun getJson(urlStr: String): JSONObject {
+        var conn: HttpURLConnection? = null
+        try {
+            conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 15000
+                readTimeout = 25000
+                setRequestProperty("Authorization", "Bearer $key")
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("HTTP-Referer", "https://jev-assistant.local")
+                setRequestProperty("X-Title", "Jev Assistant")
+            }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val text = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
+            if (code !in 200..299) throw RuntimeException("HTTP $code: ${text.take(160)}")
+            return JSONObject(text)
+        } finally {
+            conn?.disconnect()
+        }
     }
 
     /** POST JSON with one retry chain for 429/529 (exponential backoff). */
