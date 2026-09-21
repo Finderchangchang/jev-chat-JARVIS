@@ -1,0 +1,33 @@
+# Build
+/build/
+/app/build/
+.gradle/
+*.apk
+*.ap_
+*.dex
+*.class
+local.properties
+
+# Machine-specific
+env.ps1
+gradle.properties.local
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Dev artifacts / reports (not part of the product)
+/_reports/
+/tools/jev/report/
+/tools/jev/__pycache__/
+**/__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Never commit secrets
+*.key
+secrets.*

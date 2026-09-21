@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- White chat bubble (safe zone ~ 30..78) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,34 h28 a11,11 0 0 1 11,11 v14 a11,11 0 0 1 -11,11 h-16 l-13,11 v-11 h-1 a11,11 0 0 1 -11,-11 v-14 a11,11 0 0 1 11,-11 z" />
+    <!-- Three dots -->
+    <path android:fillColor="#3A7AFE" android:pathData="M46,52 m-3.4,0 a3.4,3.4 0 1 0 6.8,0 a3.4,3.4 0 1 0 -6.8,0" />
+    <path android:fillColor="#3A7AFE" android:pathData="M56,52 m-3.4,0 a3.4,3.4 0 1 0 6.8,0 a3.4,3.4 0 1 0 -6.8,0" />
+    <path android:fillColor="#3A7AFE" android:pathData="M66,52 m-3.4,0 a3.4,3.4 0 1 0 6.8,0 a3.4,3.4 0 1 0 -6.8,0" />
+</vector>

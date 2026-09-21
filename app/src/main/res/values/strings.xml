@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Jev助手</string>
+    <string name="a11y_desc_disguised">读取当前聊天窗口文字，用于生成回复建议。不会自动发送消息。</string>
+</resources>
