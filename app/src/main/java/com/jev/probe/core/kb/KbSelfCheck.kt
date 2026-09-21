@@ -73,8 +73,11 @@ object KbSelfCheck {
                 failures.add("历史落盘条数不对：期望 ${snapshot.messages.size}，实际 ${store.logSize(contactId)}")
 
             // 4. an older line survives, and re-reading the same screen adds nothing
+            //    (screenBatch=false: this is a hand-injected line, not a capture,
+            //    so it is not measured against the last screen we recorded)
             store.appendLog(contactId, listOf(
-                LogEntry("other", OLD_LINE, System.currentTimeMillis() - 86_400_000L, "com.jev.probe")))
+                LogEntry("other", OLD_LINE, System.currentTimeMillis() - 86_400_000L, "com.jev.probe")),
+                screenBatch = false)
             val ctx2 = ContextBuilder.build(context, snapshot, "com.jev.probe", prefs)
             if (ctx2.history.size != 1 || ctx2.history.firstOrNull()?.text != OLD_LINE)
                 failures.add("历史注入不对：期望仅 1 条旧消息，实际 ${ctx2.history.size} 条")

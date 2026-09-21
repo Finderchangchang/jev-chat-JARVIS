@@ -25,9 +25,14 @@ import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
  */
 class MlKitOcr : OcrEngine {
 
-    /** Screenshot bitmap size / screen size. Set per capture. */
+    /** Screenshot bitmap size / captured area size. Set per capture. */
     var scaleX: Float = 1f
     var scaleY: Float = 1f
+
+    /** Where the captured area starts on screen (a window shot is not the whole
+     *  display). Added back after unscaling, so boxes are screen coordinates. */
+    var originX: Int = 0
+    var originY: Int = 0
 
     private val main = Handler(Looper.getMainLooper())
 
@@ -54,6 +59,8 @@ class MlKitOcr : OcrEngine {
 
         val sx = if (scaleX > 0f) scaleX else 1f
         val sy = if (scaleY > 0f) scaleY else 1f
+        val wx = originX
+        val wy = originY
         val image = try {
             InputImage.fromBitmap(src, 0)
         } catch (e: Exception) {
@@ -70,10 +77,10 @@ class MlKitOcr : OcrEngine {
                         val t = line.text.trim()
                         if (t.isEmpty()) continue
                         lines.add(OcrLine(t, Rect(
-                            ((b.left + ox) / sx).toInt(),
-                            ((b.top + oy) / sy).toInt(),
-                            ((b.right + ox) / sx).toInt(),
-                            ((b.bottom + oy) / sy).toInt())))
+                            ((b.left + ox) / sx).toInt() + wx,
+                            ((b.top + oy) / sy).toInt() + wy,
+                            ((b.right + ox) / sx).toInt() + wx,
+                            ((b.bottom + oy) / sy).toInt() + wy)))
                     }
                 }
                 lines.sortBy { it.bounds.top }
@@ -94,5 +101,13 @@ class MlKitOcr : OcrEngine {
         private val client: TextRecognizer by lazy {
             TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
         }
+
+        /**
+         * Build the recognizer ahead of time. First use loads the bundled model,
+         * which is the one slow step here — call this from a worker thread when
+         * the service connects so the first real OCR does not pay for it on the
+         * main thread (the screenshot callback runs there).
+         */
+        fun warmUp() { runCatching { client } }
     }
 }

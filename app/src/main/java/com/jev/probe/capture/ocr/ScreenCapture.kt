@@ -2,6 +2,7 @@ package com.jev.probe.capture.ocr
 
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -38,8 +39,24 @@ class ScreenCapture(
 ) {
 
     sealed class Result {
-        /** [scaleX]/[scaleY] = bitmap size / screen size, for mapping node rects. */
-        data class Ok(val bitmap: Bitmap, val scaleX: Float, val scaleY: Float) : Result()
+        /**
+         * [scaleX]/[scaleY] = bitmap size / captured area size, and
+         * [originX]/[originY] = where that area starts on screen.
+         *
+         * A window shot (API 34+) is NOT the whole display: in split screen, or
+         * whenever the window excludes the status bar, the picture is both
+         * smaller than the display and offset from its origin. So node rects map
+         * as `bitmapX = (screenX - originX) * scaleX`, and OCR boxes map back the
+         * other way. For the whole-display fallback the origin is (0,0) and the
+         * size is the display's, which is the old behaviour.
+         */
+        data class Ok(
+            val bitmap: Bitmap,
+            val scaleX: Float,
+            val scaleY: Float,
+            val originX: Int = 0,
+            val originY: Int = 0
+        ) : Result()
         data class Failed(val code: Int, val humanMessage: String) : Result()
     }
 
@@ -67,16 +84,29 @@ class ScreenCapture(
 
         // Hide the bubble, give the compositor a frame to drop it, then shoot.
         runCatching { hideOverlay() }
-        main.postDelayed({ shoot(finish) }, HIDE_SETTLE_MS)
+        main.postDelayed({ shoot(finish, done) }, HIDE_SETTLE_MS)
     }
 
-    private fun shoot(finish: (Result) -> Unit) {
+    private fun shoot(finish: (Result) -> Unit, done: AtomicBoolean) {
         val exec = service.mainExecutor
+        // Which area the picture will cover. Set just before the window shot is
+        // issued and read inside the callback, so the mapping always matches the
+        // call that actually produced the bitmap.
+        var windowBounds: Rect? = null
+        // The system can simply never call back (seen when a shot lands on a
+        // protected window during a transition). Without this the overlay stays
+        // INVISIBLE and the caller's busy flag is stuck until the service dies.
+        val timeout = Runnable { finish(Result.Failed(CODE_TIMEOUT, humanMessage(CODE_TIMEOUT))) }
         val cb = object : AccessibilityService.TakeScreenshotCallback {
             override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
-                finish(toBitmap(result))
+                main.removeCallbacks(timeout)
+                // Already timed out: this result is void. Drop the buffer (never
+                // leak it) and do not touch the caller a second time.
+                if (done.get()) { runCatching { result.hardwareBuffer.close() }; return }
+                finish(toBitmap(result, windowBounds))
             }
             override fun onFailure(errorCode: Int) {
+                main.removeCallbacks(timeout)
                 finish(Result.Failed(errorCode, humanMessage(errorCode)))
             }
         }
@@ -85,25 +115,39 @@ class ScreenCapture(
         // some OEM builds that refuse a whole-display capture. Fall back to the
         // display shot when the window id is unknown or the call is unavailable.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            val windowId = runCatching { service.rootInActiveWindow?.windowId }.getOrNull()
+            val node = runCatching { service.rootInActiveWindow }.getOrNull()
+            val windowId = node?.windowId
             if (windowId != null && windowId != -1) {
+                windowBounds = runCatching {
+                    val r = Rect()
+                    node.window?.getBoundsInScreen(r)
+                    r
+                }.getOrNull()?.takeIf { it.width() > 0 && it.height() > 0 }
                 try {
                     service.takeScreenshotOfWindow(windowId, exec, cb)
+                    main.postDelayed(timeout, TIMEOUT_MS)
                     return
                 } catch (e: Throwable) {
+                    windowBounds = null
                     Log.w(TAG, "takeScreenshotOfWindow unavailable: ${e.javaClass.simpleName}")
                 }
             }
         }
         try {
             service.takeScreenshot(Display.DEFAULT_DISPLAY, exec, cb)
+            main.postDelayed(timeout, TIMEOUT_MS)
         } catch (e: Throwable) {
             finish(Result.Failed(CODE_INTERNAL, "截屏失败：${e.javaClass.simpleName}"))
         }
     }
 
-    /** HardwareBuffer -> software bitmap. The buffer is closed no matter what. */
-    private fun toBitmap(result: AccessibilityService.ScreenshotResult): Result {
+    /**
+     * HardwareBuffer -> software bitmap. The buffer is closed no matter what.
+     *
+     * [window] is the area the shot covers, in screen coordinates, or null for a
+     * whole-display shot (then the display metrics are the frame, as before).
+     */
+    private fun toBitmap(result: AccessibilityService.ScreenshotResult, window: Rect?): Result {
         val buffer = result.hardwareBuffer
         return try {
             val hw = Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)
@@ -113,9 +157,11 @@ class ScreenCapture(
                 Result.Failed(CODE_INTERNAL, "截屏失败：拿到的画面读不出来")
             } else {
                 val dm = service.resources.displayMetrics
-                val sx = if (dm.widthPixels > 0) bmp.width / dm.widthPixels.toFloat() else 1f
-                val sy = if (dm.heightPixels > 0) bmp.height / dm.heightPixels.toFloat() else 1f
-                Result.Ok(bmp, sx, sy)
+                val w = window?.width() ?: dm.widthPixels
+                val h = window?.height() ?: dm.heightPixels
+                val sx = if (w > 0) bmp.width / w.toFloat() else 1f
+                val sy = if (h > 0) bmp.height / h.toFloat() else 1f
+                Result.Ok(bmp, sx, sy, window?.left ?: 0, window?.top ?: 0)
             }
         } catch (e: Throwable) {
             Result.Failed(CODE_INTERNAL, "截屏失败：${e.javaClass.simpleName}")
@@ -129,12 +175,17 @@ class ScreenCapture(
 
         /** Our own throttle, not a platform code. */
         const val CODE_THROTTLED = -1
+        /** Our own watchdog: the platform callback never arrived. */
+        const val CODE_TIMEOUT = -2
         private const val CODE_INTERNAL = 1
 
         private const val MIN_INTERVAL_MS = 1000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val MAX_STREAK = 6
         private const val HIDE_SETTLE_MS = 120L
+
+        /** How long we wait for the screenshot callback before giving up. */
+        private const val TIMEOUT_MS = 3000L
 
         // Global across instances on purpose: the system limit is per service,
         // and the service may build a new ScreenCapture per call site.
@@ -151,6 +202,7 @@ class ScreenCapture(
         /** Platform error codes, in words a user can act on. */
         fun humanMessage(code: Int): String = when (code) {
             CODE_THROTTLED -> "截屏太频繁"
+            CODE_TIMEOUT -> "截屏超时"
             1 -> "截屏失败：内部错误（系统拒绝，可能是该无障碍服务不被允许截屏）"
             2 -> "截屏失败：无障碍服务未声明截屏能力（去设置里把无障碍关掉再开启）"
             3 -> "截屏失败：间隔太短，等一秒再试"

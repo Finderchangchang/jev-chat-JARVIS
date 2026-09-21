@@ -30,10 +30,14 @@ class KbStore private constructor(context: Context) {
     private val notesFile: File get() = File(root, "notes.json")
     private val contactsFile: File get() = File(root, "contacts.json")
     private fun logFile(contactId: String) = File(File(root, "logs"), "$contactId.json")
+    private fun screenFile(contactId: String) = File(File(root, "logs"), "$contactId.screen.json")
 
     private var notesCache: MutableList<Note>? = null
     private var contactsCache: MutableList<Contact>? = null
     private val logCache = HashMap<String, MutableList<LogEntry>>()
+
+    /** Per contact: the comparison keys of the last screen written. See [appendLog]. */
+    private val lastScreenCache = HashMap<String, List<String>>()
 
     // ------------------------------------------------------------------ notes
 
@@ -85,7 +89,9 @@ class KbStore private constructor(context: Context) {
             if (!ok) contactsCache = null
         }
         logCache.remove(id)
+        lastScreenCache.remove(id)
         runCatching { logFile(id).delete() }
+        runCatching { screenFile(id).delete() }
         ok
     }
 
@@ -141,37 +147,75 @@ class KbStore private constructor(context: Context) {
     // ---------------------------------------------------------------- history
 
     /**
-     * Append the visible messages, keeping only the newest [MAX_LOG].
+     * Append one screenful of messages, keeping only the newest [MAX_LOG].
      *
-     * Dedupe is deliberately NARROW: an incoming line is skipped only when the
-     * same (side, text) is already sitting in the recent tail — i.e. this screen
-     * was captured a moment ago — and only when it is long enough
-     * ([DEDUPE_MIN_LEN]+) for an exact repeat to certainly be the same message.
-     * Deduping against the whole 300-line history would erase the fact that
-     * someone really did say the same thing twice. The cost of the narrow rule:
-     * short lines ("嗯", "好的") can be recorded again on a re-capture.
+     * The unit is a SEQUENCE, not a set of lines. A capture gives us the whole
+     * visible screen S, top to bottom; P is whatever screen we last wrote for
+     * this contact. Two identical short lines on one screen are two positions and
+     * get two entries — they are not folded together, and nothing is dropped for
+     * being "too short to dedupe on" or for having been said before.
+     *
+     * The rules, in order:
+     *  - S equals P            → the same screen again, write nothing.
+     *  - log is empty          → write all of S.
+     *  - log tail matches the first k lines of S (k > 0) → the screen scrolled by
+     *    (S.size - k) lines; append only that new tail.
+     *  - k is 0 and S shares nothing with P → the user scrolled up into old
+     *    messages we already hold; this round writes nothing rather than
+     *    duplicating history at the end of the file.
+     *  - anything else         → append all of S.
+     *
+     * @param screenBatch true for a capture (the rules above). False for a
+     *        deliberate single-entry injection that is NOT a screen read, which
+     *        is appended as-is.
      */
-    fun appendLog(contactId: String, entries: List<LogEntry>): Boolean {
+    fun appendLog(contactId: String, entries: List<LogEntry>, screenBatch: Boolean = true): Boolean {
         if (entries.isEmpty()) return true
         synchronized(lock) {
+            val screen = entries.filter { it.text.isNotBlank() }
+            if (screen.isEmpty()) return true
             val list = loadLog(contactId)
-            val window = maxOf(entries.size * 3, MIN_DEDUPE_WINDOW)
-            val seen = HashSet<String>(window * 2)
-            for (i in maxOf(0, list.size - window) until list.size) {
-                val e = list[i]
-                if (e.text.length >= DEDUPE_MIN_LEN) seen.add(key(e.side, e.text))
+            val keys = screen.map { key(it.side, it.text) }
+            val prev = if (screenBatch) loadLastScreen(contactId) else emptyList()
+
+            // Same screen as last time: nothing happened worth recording.
+            if (screenBatch && prev.isNotEmpty() && prev == keys) return true
+
+            // How much of S the log already ends with.
+            var k = 0
+            val maxK = minOf(list.size, keys.size)
+            for (cand in maxK downTo 1) {
+                var match = true
+                for (i in 0 until cand) {
+                    val e = list[list.size - cand + i]
+                    if (key(e.side, e.text) != keys[i]) { match = false; break }
+                }
+                if (match) { k = cand; break }
             }
-            var added = 0
-            for (e in entries) {
-                if (e.text.isBlank()) continue
-                if (e.text.length >= DEDUPE_MIN_LEN && !seen.add(key(e.side, e.text))) continue
-                list.add(e); added++
+
+            val tail: List<LogEntry> = when {
+                !screenBatch -> screen
+                list.isEmpty() -> screen
+                k > 0 -> screen.drop(k)
+                // Nothing in common with the screen we last wrote → we are looking
+                // at older messages, not newer ones. Leave the log alone.
+                prev.isNotEmpty() && keys.none { it in prev } -> {
+                    Log.d(TAG, "appendLog contact=$contactId skipped: scrolled off the last screen")
+                    return true
+                }
+                else -> screen
             }
-            if (added == 0) return true
+            if (tail.isEmpty()) {
+                if (screenBatch) saveLastScreen(contactId, keys)
+                return true
+            }
+
+            list.addAll(tail)
             while (list.size > MAX_LOG) list.removeAt(0)
             val ok = writeAtomic(logFile(contactId), logJson(list))
             if (!ok) logCache.remove(contactId)
-            Log.d(TAG, "appendLog contact=$contactId added=$added total=${list.size} ok=$ok")
+            if (ok && screenBatch) saveLastScreen(contactId, keys)
+            Log.d(TAG, "appendLog contact=$contactId added=${tail.size} overlap=$k total=${list.size} ok=$ok")
             return ok
         }
     }
@@ -190,8 +234,36 @@ class KbStore private constructor(context: Context) {
 
     fun clearLog(contactId: String) = synchronized(lock) {
         logCache.remove(contactId)
+        lastScreenCache.remove(contactId)
         runCatching { logFile(contactId).delete() }
+        runCatching { screenFile(contactId).delete() }
         Unit
+    }
+
+    /**
+     * The (side, text) sequence of the last screen written for this contact, as
+     * comparison keys. Kept on disk as well as in memory so that re-opening a
+     * chat that has not moved since does not append the same screen again.
+     */
+    private fun loadLastScreen(contactId: String): List<String> {
+        lastScreenCache[contactId]?.let { return it }
+        val out = ArrayList<String>()
+        val loaded = readJsonArray(screenFile(contactId))
+        loaded.arr?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val s = arr.optString(i)
+                if (s.isNotEmpty()) out.add(s)
+            }
+        }
+        if (loaded.trustworthy) lastScreenCache[contactId] = out
+        return out
+    }
+
+    private fun saveLastScreen(contactId: String, keys: List<String>) {
+        lastScreenCache[contactId] = keys
+        val arr = JSONArray()
+        keys.forEach { arr.put(it) }
+        if (!writeAtomic(screenFile(contactId), arr.toString())) lastScreenCache.remove(contactId)
     }
 
     // ------------------------------------------------------------------ admin
@@ -211,6 +283,7 @@ class KbStore private constructor(context: Context) {
         notesCache = null
         contactsCache = null
         logCache.clear()
+        lastScreenCache.clear()
         runCatching { root.deleteRecursively() }
         Log.i(TAG, "kb cleared")
         Unit
@@ -400,12 +473,6 @@ class KbStore private constructor(context: Context) {
     companion object {
         private const val TAG = "JEVASSIST"
         const val MAX_LOG = 300
-
-        /** Shorter lines are too common to dedupe on. Matches ContextBuilder. */
-        const val DEDUPE_MIN_LEN = 4
-
-        /** Tail of the history compared against an incoming screen. */
-        private const val MIN_DEDUPE_WINDOW = 30
 
         @Volatile private var instance: KbStore? = null
 

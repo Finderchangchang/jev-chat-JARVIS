@@ -189,6 +189,60 @@ class QQAdapter : ChatAppAdapter {
     }
 }
 
+/** Only my own Feishu bubbles carry the sent/read strip. */
+private const val FEISHU_READ_STATE_ID = "time_read_state_container_align_bubble"
+
+/** Does this bubble carry the "sent / read" strip that only mine have? */
+private fun feishuHasReadState(bubble: AccessibilityNodeInfo): Boolean {
+    val stack = ArrayDeque<AccessibilityNodeInfo>()
+    stack.addLast(bubble)
+    var guard = 0
+    while (stack.isNotEmpty() && guard < 400) {
+        guard++
+        val node = stack.removeLast()
+        val id = node.viewIdResourceName ?: ""
+        if (id.endsWith(FEISHU_READ_STATE_ID)) return true
+        for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
+    }
+    return false
+}
+
+/**
+ * Feishu bubble rectangles in SCREEN coordinates, top to bottom, with the side
+ * the read-receipt strip implies.
+ *
+ * Split out of [FeishuAdapter.extract] so the capture service can call it again
+ * from inside the screenshot callback: several hundred ms pass between reading
+ * the tree and the picture arriving (debounce + overlay hide + the shot itself),
+ * and a list that scrolled in between would make us crop the wrong rows.
+ */
+internal fun collectFeishuBubbleRects(
+    root: AccessibilityNodeInfo,
+    res: Resources
+): List<BubbleRect> {
+    val height = res.displayMetrics.heightPixels
+    val topBand = (height * 0.14).toInt()      // action bar + tab row
+    val bottomBand = (height * 0.84).toInt()   // input box + keyboard
+    val rects = ArrayList<BubbleRect>()
+    val stack = ArrayDeque<AccessibilityNodeInfo>()
+    stack.addLast(root)
+    var guard = 0
+    while (stack.isNotEmpty() && guard < 6000) {
+        guard++
+        val node = stack.removeLast()
+        val id = node.viewIdResourceName ?: ""
+        if (id.endsWith(":id/bubble_content_container")) {
+            val b = Rect(); node.getBoundsInScreen(b)
+            if (b.width() > 0 && b.height() > 0 && b.bottom > topBand && b.top < bottomBand) {
+                rects.add(BubbleRect(Rect(b), if (feishuHasReadState(node)) "me" else "other"))
+            }
+        }
+        for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
+    }
+    rects.sortBy { it.rect.top }
+    return rects
+}
+
 /**
  * Feishu / Lark (com.ss.android.lark). Nodes are not obfuscated, but the message
  * text is DRAWN, not laid out as views (verified 2026-09-21): the tree gives us
@@ -217,7 +271,8 @@ class FeishuAdapter : ChatAppAdapter {
         var isChat = false
         var title: String? = null
         val items = ArrayList<Triple<Int, Int, String>>() // top, centerX, text
-        val rects = ArrayList<BubbleRect>()
+        // Same collection the service re-runs inside the screenshot callback.
+        val rects = collectFeishuBubbleRects(root, res)
 
         val stack = ArrayDeque<AccessibilityNodeInfo>()
         stack.addLast(root)
@@ -229,13 +284,6 @@ class FeishuAdapter : ChatAppAdapter {
             if (id.endsWith(":id/message") || id.endsWith(":id/bubble_content_container") ||
                 id.endsWith(":id/kb_rich_text_content")) isChat = true
             if (id.endsWith(":id/group_name")) node.text?.toString()?.let { if (title == null) title = it }
-
-            if (id.endsWith(":id/bubble_content_container")) {
-                val b = Rect(); node.getBoundsInScreen(b)
-                if (b.width() > 0 && b.height() > 0 && b.bottom > topBand && b.top < bottomBand) {
-                    rects.add(BubbleRect(Rect(b), if (hasReadState(node)) "me" else "other"))
-                }
-            }
 
             val text = node.text?.toString()
             val cls = node.className?.toString()
@@ -249,7 +297,6 @@ class FeishuAdapter : ChatAppAdapter {
         }
         if (!isChat) return null
 
-        rects.sortBy { it.rect.top }
         if (items.isEmpty()) return ChatSnapshot(title, emptyList(), rects)
 
         items.sortBy { it.first }
@@ -257,21 +304,6 @@ class FeishuAdapter : ChatAppAdapter {
             Msg(if (cx > width / 2) "me" else "other", text)
         }
         return ChatSnapshot(title, msgs, rects)
-    }
-
-    /** Does this bubble carry the "sent / read" strip that only mine have? */
-    private fun hasReadState(bubble: AccessibilityNodeInfo): Boolean {
-        val stack = ArrayDeque<AccessibilityNodeInfo>()
-        stack.addLast(bubble)
-        var guard = 0
-        while (stack.isNotEmpty() && guard < 400) {
-            guard++
-            val node = stack.removeLast()
-            val id = node.viewIdResourceName ?: ""
-            if (id.endsWith(READ_STATE_ID)) return true
-            for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
-        }
-        return false
     }
 
     /** Non-message UI text to skip: title, sender name, time, system notices,
@@ -284,11 +316,6 @@ class FeishuAdapter : ChatAppAdapter {
             id.endsWith(":id/kb_rich_text_content") ||
             id.endsWith(":id/thread_title_tv") ||
             id.endsWith(":id/thread_subtitle_tv")
-
-    companion object {
-        /** Only my own bubbles carry the sent/read strip. */
-        private const val READ_STATE_ID = "time_read_state_container_align_bubble"
-    }
 }
 
 /** Trailing "8:11 上午" / "10:29 下午" / "8:11 AM" stamp X glues onto a message. */

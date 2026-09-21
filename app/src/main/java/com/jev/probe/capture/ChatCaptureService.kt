@@ -71,6 +71,10 @@ open class ChatCaptureService : AccessibilityService() {
     private val ocr = MlKitOcr()
     private var ocrBusy = false
 
+    /** What the screen looked like the last time we fired an automatic shot.
+     *  See [ocrSignature]: this is the brake on the OCR path. */
+    private var lastOcrSignature: String = ""
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         prefs = Prefs(this)
@@ -95,6 +99,9 @@ open class ChatCaptureService : AccessibilityService() {
         overlay?.onOcrCapture = { ocrCaptureManual() }
         // Keep the process at foreground importance so MIUI does not freeze us.
         runCatching { KeepAliveService.start(this) }
+        // Load the bundled OCR model now, off the main thread: the first
+        // recognize() otherwise pays for it inside the screenshot callback.
+        submit { MlKitOcr.warmUp() }
         // HyperOS may kill and restart us. On (re)connect, proactively re-show the
         // bubble for whatever chat is already open, so it comes back on its own
         // instead of waiting for the user to scroll.
@@ -111,13 +118,23 @@ open class ChatCaptureService : AccessibilityService() {
         // event's package. The event package can be an IME (e.g. com.tencent.wetype)
         // or the status bar while the chat app is still foreground — keying off it
         // made the bubble flicker (hide → re-show → hide…). rootInActiveWindow stays
-        // on the chat app while the keyboard is up, so this is stable. Our own app
-        // (com.jev.probe) is not an adapted package, so it hides too.
+        // on the chat app while the keyboard is up, so this is stable.
+        //
+        // An app with no adapter is NOT a reason to take the bubble away: the only
+        // way into DingTalk / Telegram / anything else is the bubble menu's
+        // "截屏识别一次", and a bubble that is gone cannot be tapped. So we park
+        // the idle bubble there instead — still no automatic capture, no analysis.
+        // The bubble does come off for places where it would only be in the way:
+        // our own settings screens, the launcher, and the system UI.
         if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val fg = rootInActiveWindow?.packageName?.toString()
             if (fg != null && fg !in adapters) {
                 foregroundPkg = fg
-                main.post { overlay?.hide() }
+                val drop = fg == packageName ||
+                    fg.contains("launcher", ignoreCase = true) ||
+                    fg == "com.miui.home" ||
+                    fg == "com.android.systemui"
+                main.post { if (drop) overlay?.hide() else overlay?.showIdle(null) }
                 return
             }
         }
@@ -143,6 +160,16 @@ open class ChatCaptureService : AccessibilityService() {
         // to ScreenCapture's own >=1s throttle and failure backoff.
         if (snapshot.messages.isEmpty()) {
             if (prefs.ocrFallback) {
+                // Gate BEFORE the shot, not after the OCR. Feishu's tree is empty
+                // on every content-changed event, and a successful shot resets the
+                // failure backoff — so without this the caret blinking or an
+                // "online" badge flipping keeps a screenshot going out every
+                // second forever. The picture can only differ if the bubbles moved
+                // or the conversation changed, and that is exactly what the
+                // signature measures.
+                val sig = ocrSignature(pkg ?: "", snapshot.title, snapshot.bubbleRects)
+                if (sig == lastOcrSignature && overlay?.isShowing() == true) return
+                lastOcrSignature = sig
                 ocrCapture(snapshot.title, snapshot.bubbleRects, pkg ?: "", manual = false)
             }
             return
@@ -233,6 +260,23 @@ open class ChatCaptureService : AccessibilityService() {
     }
 
     /**
+     * What the screen would look like to a camera, as far as the tree can tell.
+     *
+     * Feishu: the conversation title plus every bubble rectangle and its side —
+     * the bubbles move whenever the list scrolls or a message arrives, and stay
+     * put when only chrome (caret, presence dot, timestamp) redraws. Apps that
+     * give us no rectangles fall back to package + title, which at least stops a
+     * burst of events on one screen from becoming a burst of screenshots.
+     */
+    private fun ocrSignature(pkg: String, title: String?, rects: List<BubbleRect>): String {
+        if (rects.isEmpty()) return pkg + "|" + (title ?: "")
+        return (title ?: "") + "|" + rects.joinToString(";") { br ->
+            val r = br.rect
+            "${r.left},${r.top},${r.right},${r.bottom},${br.side}"
+        }
+    }
+
+    /**
      * Screenshot, then either OCR each known bubble rect (Feishu: the tree knows
      * where the bubbles are and who sent them, just not what they say) or OCR
      * the whole screen (everything else).
@@ -245,6 +289,10 @@ open class ChatCaptureService : AccessibilityService() {
                 is ScreenCapture.Result.Failed -> {
                     ocrBusy = false
                     Log.i(TAG, "ocr: screenshot failed code=${res.code}")
+                    // Nothing was read, so the signature must not claim this screen
+                    // is done — the next event may retry, still held back by
+                    // ScreenCapture's own throttle and failure backoff.
+                    if (!manual) lastOcrSignature = ""
                     // Throttle/interval codes are transient timing, not something
                     // the user can act on — nagging about them would be constant.
                     val transient = res.code == ScreenCapture.CODE_THROTTLED || res.code == 3
@@ -252,8 +300,16 @@ open class ChatCaptureService : AccessibilityService() {
                 }
                 is ScreenCapture.Result.Ok -> {
                     ocr.scaleX = res.scaleX; ocr.scaleY = res.scaleY
-                    if (rects.isNotEmpty() && !manual) ocrByRects(res.bitmap, rects, treeTitle, pkg)
-                    else ocrWholeScreen(res.bitmap, treeTitle, pkg, manual)
+                    ocr.originX = res.originX; ocr.originY = res.originY
+                    if (rects.isNotEmpty() && !manual) {
+                        // Re-measure inside the callback. The rects handed in were
+                        // read before the 120ms overlay-hide wait and the shot
+                        // itself; one scroll tick in between and we would crop the
+                        // rows next to the ones in the picture. Fall back to the
+                        // old rects only if the tree gives us nothing now.
+                        val fresh = rootInActiveWindow?.let { collectFeishuBubbleRects(it, resources) }
+                        ocrByRects(res.bitmap, if (fresh.isNullOrEmpty()) rects else fresh, treeTitle, pkg)
+                    } else ocrWholeScreen(res.bitmap, treeTitle, pkg, manual)
                 }
             }
         }
@@ -262,12 +318,15 @@ open class ChatCaptureService : AccessibilityService() {
     /** One OCR pass per bubble rectangle; each rect becomes exactly one message. */
     private fun ocrByRects(bmp: Bitmap, rects: List<BubbleRect>, title: String?, pkg: String) {
         val sx = ocr.scaleX; val sy = ocr.scaleY
+        // Screen -> bitmap: drop the window origin first. A window shot does not
+        // start at (0,0) in split screen or when it excludes the status bar.
+        val ox = ocr.originX; val oy = ocr.originY
         val out = arrayOfNulls<Msg>(rects.size)
         var remaining = rects.size
         rects.forEachIndexed { i, br ->
             val region = Rect(
-                (br.rect.left * sx).toInt(), (br.rect.top * sy).toInt(),
-                (br.rect.right * sx).toInt(), (br.rect.bottom * sy).toInt())
+                ((br.rect.left - ox) * sx).toInt(), ((br.rect.top - oy) * sy).toInt(),
+                ((br.rect.right - ox) * sx).toInt(), ((br.rect.bottom - oy) * sy).toInt())
             ocr.recognize(bmp, region) { lines ->
                 val text = cleanBubbleText(lines.joinToString(" ") { it.text })
                 if (text.isNotEmpty()) out[i] = Msg(br.side, text)
