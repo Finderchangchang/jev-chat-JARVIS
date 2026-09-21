@@ -24,6 +24,8 @@ import androidx.appcompat.app.AppCompatActivity
 import com.jev.probe.core.ChatSnapshot
 import com.jev.probe.core.Msg
 import com.jev.probe.core.Prefs
+import com.jev.probe.core.kb.KbSelfCheck
+import com.jev.probe.core.kb.KbStore
 import com.jev.probe.jev.JudgeClient
 import com.jev.probe.jev.ReplyClient
 import com.jev.probe.jev.VisionClient
@@ -90,7 +92,10 @@ class SettingsActivity : AppCompatActivity() {
                     judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_TYPESAFE)
                     judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_TYPESAFE)
                 }
-                // custom: leave whatever the user typed
+                // Custom POSTs the box verbatim, so a preset HOST left in the box
+                // would hit the API root. Expand it into the full endpoint the
+                // preset would have used; anything hand-typed is left alone.
+                2 -> judgeBaseEdit.setText(expandJudgeUrl(judgeBaseEdit.text.toString()))
             }
         })
         judgeCard.addView(label("Base URL"))
@@ -108,11 +113,17 @@ class SettingsActivity : AppCompatActivity() {
             val model = judgeModelEdit.text.toString().trim()
             if (key.isBlank()) { judgeResult.text = "请先填密钥"; return@cardBtn }
             judgeResult.text = "测试中…"
-            val probe = draftPrefs {
-                judgeProvider = providerOf(judgeProviderIdx)
-                judgeBaseUrl = base
+            // Provider follows the address when it is still a known preset host,
+            // so a stale pill selection cannot send a TypeSafe path to OpenRouter.
+            val provider = resolveJudgeProvider(judgeProviderIdx, base)
+            if (provider == Prefs.PROVIDER_CUSTOM && base.isBlank()) {
+                judgeResult.text = "自定义档要填完整 URL（带路径）"; return@cardBtn
+            }
+            val probe = draftPrefs(SCRATCH_JUDGE) {
+                judgeProvider = provider
+                judgeBaseUrl = base.ifBlank { defaultJudgeBase(provider) }
                 judgeKey = key
-                judgeModel = model.ifBlank { Prefs.DEFAULT_JUDGE_MODEL_OPENROUTER }
+                judgeModel = model.ifBlank { defaultJudgeModel(provider) }
             }
             worker.execute {
                 val t0 = System.currentTimeMillis()
@@ -161,7 +172,7 @@ class SettingsActivity : AppCompatActivity() {
         replyCard.addView(cardBtn("测试回复") {
             val base = replyBaseEdit.text.toString().trim()
             val model = replyModelEdit.text.toString().trim()
-            val probe = draftPrefs {
+            val probe = draftPrefs(SCRATCH_REPLY) {
                 judgeKey = judgeKeyEdit.text.toString().trim()
                 replyBaseUrl = base.ifBlank { Prefs.DEFAULT_REPLY_BASE }
                 replyKey = replyKeyEdit.text.toString().trim()
@@ -173,7 +184,7 @@ class SettingsActivity : AppCompatActivity() {
                 val t0 = System.currentTimeMillis()
                 var err: String? = null
                 val out = try {
-                    ReplyClient(probe).summarize("请只回复两个字：收到")
+                    ReplyClient(probe).ping()
                 } catch (e: Exception) { err = e.message; "" }
                 val ms = System.currentTimeMillis() - t0
                 main.post {
@@ -217,7 +228,7 @@ class SettingsActivity : AppCompatActivity() {
                 visionResult.text = GUARD_NO_VISION
                 return@cardBtn
             }
-            val probe = draftPrefs {
+            val probe = draftPrefs(SCRATCH_VISION) {
                 judgeKey = judgeKeyEdit.text.toString().trim()
                 replyBaseUrl = replyBaseEdit.text.toString().trim().ifBlank { Prefs.DEFAULT_REPLY_BASE }
                 replyKey = replyKeyEdit.text.toString().trim()
@@ -256,6 +267,46 @@ class SettingsActivity : AppCompatActivity() {
         card2.addView(wlEdit)
         val autoRow = toggleRow("对方发消息时自动分析", prefs.autoAnalyze)
         card2.addView(autoRow)
+
+        // --- 知识库 / 关联上下文（D 阶段） ---
+        val ctxRow = toggleRow("记录聊天历史（只存本机，用于关联上下文）", prefs.contextEnabled)
+        card2.addView(ctxRow)
+        card2.addView(text("关闭时不写任何聊天内容到磁盘；笔记与联系人匹配仍然照常工作。", 11f, sub))
+        card2.addView(label("注入最近历史条数（0–100）"))
+        val ctxCountEdit = edit(prefs.contextHistoryCount.toString(), "30").apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+        }
+        card2.addView(ctxCountEdit)
+        card2.addView(cardBtn("知识库与联系人") {
+            startActivity(android.content.Intent(this, KnowledgeActivity::class.java))
+        })
+        val kbResult = resultText()
+        card2.addView(cardBtn("清空知识库与历史") {
+            val c = KbStore.get(this).counts()
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("清空知识库与历史")
+                .setMessage("将删除 ${c.notes} 条笔记、${c.contacts} 个联系人、${c.logLines} 条聊天历史。" +
+                    "密钥、白名单等设置不受影响。不可恢复。")
+                .setPositiveButton("清空") { _, _ ->
+                    KbStore.get(this).clearAll()
+                    kbResult.text = "已清空知识库与历史"
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        })
+        // Deliberately low-key: a developer aid, not a user feature.
+        card2.addView(text("自检", 12f, sub).apply {
+            setPadding(dp(2), dp(12), dp(8), dp(2))
+            setOnClickListener {
+                kbResult.text = "自检中…"
+                worker.execute {
+                    val out = try { KbSelfCheck.run(this@SettingsActivity) }
+                    catch (e: Exception) { "自检异常：${e.javaClass.simpleName} ${e.message ?: ""}" }
+                    main.post { kbResult.text = out }
+                }
+            }
+        })
+        card2.addView(kbResult)
         root.addView(card2)
 
         // =================== 外观 ===================
@@ -279,12 +330,26 @@ class SettingsActivity : AppCompatActivity() {
 
         // =================== 保存 ===================
         root.addView(primaryBtn("保存全部设置") {
-            prefs.judgeProvider = providerOf(judgeProviderIdx)
-            prefs.judgeBaseUrl = judgeBaseEdit.text.toString().trim()
-                .ifBlank { Prefs.DEFAULT_JUDGE_BASE_OPENROUTER }
+            // Address wins over the pill: a preset HOST in the box means that
+            // preset's provider (and so its path), whatever the pill last said.
+            val judgeBaseTyped = judgeBaseEdit.text.toString().trim()
+            val judgeProv = resolveJudgeProvider(judgeProviderIdx, judgeBaseTyped)
+            val judgeModelTyped = judgeModelEdit.text.toString().trim()
+            prefs.judgeProvider = judgeProv
+            // Blank falls back to THIS provider's preset — never OpenRouter's by
+            // default. Custom is left exactly as typed (blank included): guessing
+            // a URL for it would silently point somewhere the user did not choose.
+            prefs.judgeBaseUrl = when {
+                judgeBaseTyped.isNotBlank() -> judgeBaseTyped
+                judgeProv == Prefs.PROVIDER_CUSTOM -> ""
+                else -> defaultJudgeBase(judgeProv)
+            }
             prefs.judgeKey = judgeKeyEdit.text.toString()
-            prefs.judgeModel = judgeModelEdit.text.toString().trim()
-                .ifBlank { Prefs.DEFAULT_JUDGE_MODEL_OPENROUTER }
+            prefs.judgeModel = when {
+                judgeModelTyped.isNotBlank() -> judgeModelTyped
+                judgeProv == Prefs.PROVIDER_CUSTOM -> ""
+                else -> defaultJudgeModel(judgeProv)
+            }
 
             prefs.replyBaseUrl = replyBaseEdit.text.toString().trim().ifBlank { Prefs.DEFAULT_REPLY_BASE }
             prefs.replyKey = replyKeyEdit.text.toString()
@@ -298,6 +363,9 @@ class SettingsActivity : AppCompatActivity() {
             prefs.whitelist = wlEdit.text.toString().split("\n")
                 .map { it.trim() }.filter { it.isNotEmpty() }.toSet()
             prefs.autoAnalyze = (autoRow.tag as? Boolean) ?: true
+            prefs.contextEnabled = (ctxRow.tag as? Boolean) ?: false
+            prefs.contextHistoryCount =
+                ctxCountEdit.text.toString().trim().toIntOrNull()?.coerceIn(0, 100) ?: 30
             prefs.overlayOpacity = seek.progress + 60
             Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show()
         })
@@ -317,20 +385,50 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     /**
-     * A throwaway [Prefs] view carrying exactly what is in the boxes right now,
-     * so a test button probes the typed values rather than the saved ones. It
-     * writes to a separate scratch SharedPreferences file, never the real one.
+     * The provider actually implied by what is in the address box. A preset host
+     * carries its own path (`/alpha/decisions`, `/v1/systemone`), so leaving that
+     * host in the box while the pill says something else would POST the wrong
+     * path — or, for custom, the bare API root.
      */
-    private fun draftPrefs(fill: Prefs.() -> Unit): Prefs {
-        getSharedPreferences(SCRATCH, MODE_PRIVATE).edit().clear().commit()
-        return Prefs(ScratchContext(this)).apply(fill)
+    private fun resolveJudgeProvider(idx: Int, base: String): String =
+        when (base.trim().trimEnd('/')) {
+            Prefs.DEFAULT_JUDGE_BASE_OPENROUTER -> Prefs.PROVIDER_OPENROUTER
+            Prefs.DEFAULT_JUDGE_BASE_TYPESAFE -> Prefs.PROVIDER_TYPESAFE
+            else -> providerOf(idx)
+        }
+
+    /** The full endpoint a preset host would have been expanded to. */
+    private fun expandJudgeUrl(base: String): String = when (base.trim().trimEnd('/')) {
+        Prefs.DEFAULT_JUDGE_BASE_OPENROUTER -> Prefs.DEFAULT_JUDGE_BASE_OPENROUTER + "/alpha/decisions"
+        Prefs.DEFAULT_JUDGE_BASE_TYPESAFE -> Prefs.DEFAULT_JUDGE_BASE_TYPESAFE + "/v1/systemone"
+        else -> base.trim()
     }
 
-    /** Redirects every SharedPreferences lookup to the scratch file. */
-    private class ScratchContext(base: android.content.Context) :
+    private fun defaultJudgeBase(provider: String): String =
+        if (provider == Prefs.PROVIDER_TYPESAFE) Prefs.DEFAULT_JUDGE_BASE_TYPESAFE
+        else Prefs.DEFAULT_JUDGE_BASE_OPENROUTER
+
+    private fun defaultJudgeModel(provider: String): String =
+        if (provider == Prefs.PROVIDER_TYPESAFE) Prefs.DEFAULT_JUDGE_MODEL_TYPESAFE
+        else Prefs.DEFAULT_JUDGE_MODEL_OPENROUTER
+
+    /**
+     * A throwaway [Prefs] view carrying exactly what is in the boxes right now,
+     * so a test button probes the typed values rather than the saved ones. Each
+     * button gets its OWN scratch file — they used to share one and clear it out
+     * from under each other when two tests overlapped. The real config is never
+     * touched either way.
+     */
+    private fun draftPrefs(scratchName: String, fill: Prefs.() -> Unit): Prefs {
+        getSharedPreferences(scratchName, MODE_PRIVATE).edit().clear().commit()
+        return Prefs(ScratchContext(this, scratchName)).apply(fill)
+    }
+
+    /** Redirects every SharedPreferences lookup to one named scratch file. */
+    private class ScratchContext(base: android.content.Context, private val scratchName: String) :
         android.content.ContextWrapper(base) {
         override fun getSharedPreferences(name: String?, mode: Int): android.content.SharedPreferences =
-            super.getSharedPreferences(SCRATCH, mode)
+            super.getSharedPreferences(scratchName, mode)
     }
 
     /** 1x1 white JPEG for the vision smoke test, via the real encoder path. */
@@ -468,8 +566,10 @@ class SettingsActivity : AppCompatActivity() {
         private const val GUARD_NO_VISION =
             "该接口不支持视觉（DeepSeek 官方没有 image_url），请换 OpenRouter 或通义兼容"
 
-        /** Scratch prefs file the test buttons probe with; never the real config. */
-        private const val SCRATCH = "jev_probe_scratch"
+        /** One scratch prefs file per test button; never the real config. */
+        private const val SCRATCH_JUDGE = "jev_probe_scratch_judge"
+        private const val SCRATCH_REPLY = "jev_probe_scratch_reply"
+        private const val SCRATCH_VISION = "jev_probe_scratch_vision"
 
     }
 }

@@ -7,6 +7,7 @@ import com.jev.probe.core.Choice
 import com.jev.probe.core.Prefs
 import com.jev.probe.core.RankedReply
 import com.jev.probe.core.Score
+import com.jev.probe.core.kb.ChatContext
 import org.json.JSONObject
 
 /**
@@ -16,12 +17,17 @@ import org.json.JSONObject
  */
 class JudgeClient(private val prefs: Prefs) {
 
-    /** The 7 judgment questions (fast, ~1s). Errors are returned, not thrown. */
-    fun judge(snapshot: ChatSnapshot, relationship: String): Analysis {
+    /**
+     * The 7 judgment questions (fast, ~1s). Errors are returned, not thrown.
+     *
+     * @param ctx D-stage knowledge context; null or empty means the request body
+     *        is byte-for-byte what v1.2 sent.
+     */
+    fun judge(snapshot: ChatSnapshot, relationship: String, ctx: ChatContext? = null): Analysis {
         val start = System.currentTimeMillis()
         return try {
             val answers = postDecisions(
-                JevQuestions.buildState(snapshot, relationship),
+                snapshot, relationship, ctx,
                 JevQuestions.judge()
             )
             Analysis(
@@ -43,14 +49,47 @@ class JudgeClient(private val prefs: Prefs) {
     }
 
     /** Ask Jev which of the candidate replies is best; throws on failure. */
-    fun rank(snapshot: ChatSnapshot, relationship: String, candidates: List<String>): List<RankedReply> {
+    fun rank(
+        snapshot: ChatSnapshot,
+        relationship: String,
+        candidates: List<String>,
+        ctx: ChatContext? = null
+    ): List<RankedReply> {
         val questions = JSONObject().put("best_reply",
             JevQuestions.rankQuestion(candidates).getJSONObject("best_reply"))
-        val answers = postDecisions(JevQuestions.buildState(snapshot, relationship), questions)
+        val answers = postDecisions(snapshot, relationship, ctx, questions)
         return parseRanked(answers.optJSONObject("best_reply"), candidates)
     }
 
-    private fun postDecisions(state: JSONObject, questions: JSONObject): JSONObject {
+    /**
+     * POST one decisions request, with the knowledge fields when there are any.
+     *
+     * Defensive retry: whether the live `alpha/decisions` endpoint accepts the
+     * new `background` / `history` state fields or rejects unknown ones with a
+     * 4xx is not verified against production yet (see the A-stage report). If a
+     * request carrying them comes back 4xx, it is sent again once without them,
+     * so an unverified field can degrade the analysis but never break it.
+     */
+    private fun postDecisions(
+        snapshot: ChatSnapshot,
+        relationship: String,
+        ctx: ChatContext?,
+        questions: JSONObject
+    ): JSONObject {
+        val background = ctx?.background(relationship) ?: ""
+        val history = ctx?.history ?: emptyList()
+        val enriched = background.isNotBlank() || history.isNotEmpty()
+        return try {
+            send(JevQuestions.buildState(snapshot, relationship, background, history), questions)
+        } catch (e: ApiException) {
+            if (enriched && e.status != null && e.status in 400..499) {
+                Log.w(TAG, "judge HTTP ${e.status} with background/history; retrying plain")
+                send(JevQuestions.buildState(snapshot, relationship), questions)
+            } else throw e
+        }
+    }
+
+    private fun send(state: JSONObject, questions: JSONObject): JSONObject {
         val url = prefs.judgeEndpoint()
         val body = JSONObject()
             .put("model", prefs.judgeModel)

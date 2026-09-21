@@ -115,6 +115,12 @@ class MainActivity : AppCompatActivity() {
         c.addView(checkLine("无障碍", a11y))
         c.addView(checkLine("悬浮窗", overlay))
         c.addView(checkLine("密钥", key, okWord = "已设", noWord = "未设"))
+        // History recording is opt-in (off by default). Mention it here, never block on it.
+        if (!prefs.contextEnabled) {
+            c.addView(text("关联上下文未开启，可在设置里开启", 12f, sub).apply {
+                setPadding(0, dp(8), 0, 0)
+            })
+        }
         return c
     }
 

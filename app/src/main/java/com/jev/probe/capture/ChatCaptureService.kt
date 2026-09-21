@@ -9,6 +9,8 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.jev.probe.core.ChatSnapshot
 import com.jev.probe.core.Prefs
+import com.jev.probe.core.kb.ContextBuilder
+import com.jev.probe.core.kb.KbStore
 import com.jev.probe.jev.JevClient
 import com.jev.probe.overlay.OverlayController
 import java.util.concurrent.Executors
@@ -58,6 +60,19 @@ open class ChatCaptureService : AccessibilityService() {
         overlay = OverlayController(this)
         overlay?.onManualAnalyze = {
             currentSnapshot?.let { pendingSnapshot = it; runAnalysis() }
+        }
+        // Bubble menu: file the open conversation as a knowledge-base contact.
+        // Contacts are never created automatically — this is the one-tap way in.
+        overlay?.onSaveContact = {
+            val title = currentSnapshot?.title
+            val pkg = activePkg ?: foregroundPkg ?: ""
+            if (title.isNullOrBlank()) overlay?.toast("当前会话没有标题，存不了")
+            else submit {
+                val msg = try {
+                    KbStore.get(this).saveOrMergeContact(title, pkg)
+                } catch (e: Exception) { "保存失败：${e.javaClass.simpleName}" }
+                main.post { overlay?.toast(msg) }
+            }
         }
         // Keep the process at foreground importance so MIUI does not freeze us.
         runCatching { KeepAliveService.start(this) }
@@ -139,20 +154,33 @@ open class ChatCaptureService : AccessibilityService() {
         main.post { overlay?.showLoading() }
         val client = JevClient(prefs)
         val rel = prefs.relationship
-        // Judgment is fast (~1s) — show it immediately.
+        val pkg = activePkg ?: ""
+        // Knowledge context first (local file reads only, a few ms), then the two
+        // network calls in parallel on the pool. A failure here must never stop
+        // the analysis — it just means no extra context this round.
         submit {
-            val judgment = client.judge(snapshot, rel)
-            main.post {
-                if (judgment.error != null) { analyzing = false; overlay?.showError(judgment.error) }
-                else overlay?.showJudgment(judgment)
+            val ctx = try {
+                ContextBuilder.build(this, snapshot, pkg, prefs)
+            } catch (e: Exception) {
+                Log.w(TAG, "context build failed: ${e.javaClass.simpleName}"); null
             }
-        }
-        // Candidate replies are slower (generative + rank) — fill in when ready.
-        submit {
-            val ranked = try { client.draftAndRank(snapshot, rel) } catch (e: Exception) { emptyList() }
-            main.post {
-                analyzing = false
-                overlay?.showReplies(ranked) { text -> fillInput(text) }
+            main.post { overlay?.setContextInfo(ctx?.notes?.size ?: 0, ctx?.history?.size ?: 0) }
+
+            // Judgment is fast (~1s) — show it immediately.
+            submit {
+                val judgment = client.judge(snapshot, rel, ctx)
+                main.post {
+                    if (judgment.error != null) { analyzing = false; overlay?.showError(judgment.error) }
+                    else overlay?.showJudgment(judgment)
+                }
+            }
+            // Candidate replies are slower (generative + rank) — fill in when ready.
+            submit {
+                val ranked = try { client.draftAndRank(snapshot, rel, ctx) } catch (e: Exception) { emptyList() }
+                main.post {
+                    analyzing = false
+                    overlay?.showReplies(ranked) { text -> fillInput(text) }
+                }
             }
         }
     }
@@ -246,6 +274,7 @@ open class ChatCaptureService : AccessibilityService() {
         // Tear the overlay down and cut its callback so a stale button tap can
         // never call back into this dead instance.
         overlay?.onManualAnalyze = null
+        overlay?.onSaveContact = null
         overlay?.hide()
         overlay = null
         worker.shutdownNow()

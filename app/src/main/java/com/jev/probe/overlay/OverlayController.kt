@@ -49,6 +49,13 @@ class OverlayController(private val ctx: Context) {
 
     var onManualAnalyze: (() -> Unit)? = null
 
+    /** Bubble menu → file the open conversation as a knowledge-base contact. */
+    var onSaveContact: (() -> Unit)? = null
+
+    /** How much knowledge context the last analysis actually used. */
+    private var ctxNotes = 0
+    private var ctxHistory = 0
+
     /** Whether the overlay window is currently on screen. */
     fun isShowing(): Boolean = root != null
 
@@ -221,8 +228,9 @@ class OverlayController(private val ctx: Context) {
             background = card(12, panelBg(), stroke = true)
             elevation = dp(8).toFloat()
             setPadding(dp(4), dp(4), dp(4), dp(4))
-            layoutParams = FrameLayout.LayoutParams(dp(150), ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(56) }
+            layoutParams = FrameLayout.LayoutParams(dp(196), ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(56) }
         }
+        menu.addView(menuItem("把当前会话存为联系人") { onSaveContact?.invoke(); root?.removeView(menu) })
         menu.addView(menuItem("打开设置") { openSettings(); root?.removeView(menu) })
         menu.addView(menuItem("隐藏助手（本次）") { hide() })
         menu.addView(menuItem("取消") { root?.removeView(menu) })
@@ -283,8 +291,14 @@ class OverlayController(private val ctx: Context) {
 
     fun showLoading() {
         ensureRoot(); bubble?.alpha = 1f
+        ctxNotes = 0; ctxHistory = 0   // counts for the round that is starting
         setContent(listOf(hint("分析中…")))
         if (!expanded) toggle()
+    }
+
+    /** How many knowledge notes / history lines went into the pending analysis. */
+    fun setContextInfo(notes: Int, history: Int) {
+        ctxNotes = notes; ctxHistory = history
     }
 
     fun showError(msg: String) {
@@ -325,6 +339,11 @@ class OverlayController(private val ctx: Context) {
         ensureRoot(); bubble?.alpha = 1f
         panel?.background = card(18, panelBg(), stroke = true) // re-apply in case opacity changed
         val views = ArrayList<View>()
+
+        // What context this read was based on (knowledge base / remembered history).
+        views.add(hint(
+            if (ctxNotes == 0 && ctxHistory == 0) "未用知识库"
+            else "知识库 $ctxNotes 条 · 历史 $ctxHistory 条"))
 
         // Danger badge — the alarm signal, up top and color-coded.
         a.dangerLevel?.let {

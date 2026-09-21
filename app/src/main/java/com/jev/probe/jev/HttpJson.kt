@@ -77,9 +77,17 @@ object HttpJson {
                     if (attempt < MAX_ATTEMPTS) Thread.sleep(500L * (1L shl attempt))
                     continue
                 }
-                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                val text = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
-                if (code !in 200..299) throw ApiException(route, code, text)
+                // Branch on the status code FIRST. Reading the body must never be
+                // able to lose it: errorStream is null on some failures (and on
+                // some OEM stacks), and a read can throw on a truncated response —
+                // either way this used to surface as a transport failure with no
+                // status, which then got retried even for a 401.
+                if (code !in 200..299) {
+                    val errText = readBody(conn.errorStream)
+                    throw ApiException(route, code, errText.ifBlank { "（响应体为空）" })
+                }
+                val text = readBody(conn.inputStream)
+                if (text.isBlank()) throw ApiException(route, code, "响应体为空")
                 return JSONObject(text)
             } catch (e: ApiException) {
                 if (e.status != null && e.status in 400..499) throw e  // client error: no retry
@@ -95,6 +103,14 @@ object HttpJson {
             }
         }
         throw last ?: ApiException(route, null, "请求失败")
+    }
+
+    /** Body text, or "" — a null stream or a read failure never costs us the status code. */
+    private fun readBody(stream: java.io.InputStream?): String {
+        stream ?: return ""
+        return try {
+            BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
+        } catch (_: Exception) { "" }
     }
 
     /** OpenRouter wants attribution headers; other hosts reject unknown ones politely. */

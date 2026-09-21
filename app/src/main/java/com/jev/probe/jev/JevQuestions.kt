@@ -1,6 +1,7 @@
 package com.jev.probe.jev
 
 import com.jev.probe.core.ChatSnapshot
+import com.jev.probe.core.kb.LogEntry
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -165,11 +166,22 @@ object JevQuestions {
         ))
     }
 
-    /** Build Jev state from a snapshot (last 10 messages). */
+    /**
+     * Build Jev state from a snapshot (last 10 messages), optionally carrying
+     * the D-stage knowledge context.
+     *
+     * @param background relationship + contact notes + matched knowledge notes.
+     * @param history older messages for this contact, already de-duplicated
+     *        against what is on screen.
+     *
+     * Both extra fields are omitted when empty, so a user with no knowledge base
+     * sends exactly the same body v1.2 did.
+     */
     fun buildState(
         snapshot: ChatSnapshot,
         relationship: String,
-        background: String = ""
+        background: String = "",
+        history: List<LogEntry> = emptyList()
     ): JSONObject {
         val msgs = JSONArray()
         val last10 = snapshot.messages.takeLast(10)
@@ -181,9 +193,12 @@ object JevQuestions {
             .put("messages", msgs)
             .put("latest_from", last10.lastOrNull()?.side ?: "other")
         val state = JSONObject().put("chat", chat)
-        // D stage fills this. Omitted while blank so A stage never sends an
-        // unknown field to the live endpoint (see _reports/v13_a_report.md).
         if (background.isNotBlank()) state.put("background", background)
+        if (history.isNotEmpty()) {
+            val h = JSONArray()
+            history.forEach { h.put(JSONObject().put("from", it.side).put("text", it.text)) }
+            state.put("history", h)
+        }
         return state
     }
 
