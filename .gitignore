@@ -31,3 +31,6 @@ Thumbs.db
 # Never commit secrets
 *.key
 secrets.*
+
+# Prebuilt APK for direct install (tracked on purpose)
+!/apk/*.apk

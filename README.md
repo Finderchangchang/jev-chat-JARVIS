@@ -60,6 +60,16 @@
 
 先用 `adb shell uiautomator dump` 看目标 App 暴露了哪些节点：像微信这样混淆节点的，要靠伪装服务才看得到；像飞书这样正文自绘的，正文要另走 OCR。
 
+## 下载安装
+
+不想自己编译，直接装仓库里编好的包：[`apk/jev-assistant-v1.0-debug.apk`](apk/jev-assistant-v1.0-debug.apk)（2026-09-21 构建，debug 签名，Android 11+）。
+
+```bash
+adb install -r apk/jev-assistant-v1.0-debug.apk
+```
+
+小米 / HyperOS 重装后悬浮窗权限会被重置，装完按主页向导再开一次。
+
 ## 构建
 
 需要 JDK 17 + Android SDK（platform 35 / build-tools 35）。
@@ -72,7 +82,7 @@
 
 ## 配置与授权
 
-1. 装 APK，打开「Jev 聊天助手」。
+1. 装 APK（见上面「下载安装」，或自己构建），打开「Jev 聊天助手」。
 2. 在**设置**里填你自己的 [OpenRouter](https://openrouter.ai/) API Key（走 `POST /api/alpha/decisions` 调 Jev），选回复生成模型（默认 `deepseek/deepseek-chat-v3.1`；国内 Gemini/OpenAI 会被区域限制）。
 3. 按主页向导开三项权限：
    - **无障碍**（读消息）
