@@ -18,6 +18,7 @@
 - minSdk 30，compileSdk / targetSdk 35
 - JDK 17（`H:\android\jdk`），Android SDK 在 `H:\android\sdk`，Gradle 缓存 `H:\android\gradle-home`
 - 目标机：小米 14（houji / 23127PN0CC），HyperOS 3.0 / Android 16 (SDK 36)，微信 8.0.78
+- 模型客户端分三路：`jev/JudgeClient`（判断）、`jev/ReplyClient`（回复）、`jev/VisionClient`（视觉，OCR 用），共用 `jev/HttpJson`；配置在 `core/Prefs`（`judge*` / `reply*` / `vision*` 字段），旧密钥一次性迁移，标记位 `prefs_migrated_v13`。
 
 ## 关键背景（2026-09-21 实测结论，别重复踩）
 
@@ -34,6 +35,8 @@
   `POST https://openrouter.ai/api/alpha/decisions`，model `typesafe/jev-1.13`，
   body `{model, state, questions}`，答案在 `answers`。实测 7 题一次约 900 ms、约 1000 输入 token、0.00004 美元。
 - Jev 主训练语言是英文：**题目的 instructions 和 criteria 用英文写，state 里的聊天内容保留中文原文。**
+- 知识库 / 上下文数据在 `filesDir/kb` 下的 JSON 文件（`notes.json` / `contacts.json` / `logs/<contactId>.json`）；`KbStore` 单锁 + 原子写（先写 `.tmp` 再 rename）。`ContextBuilder` 只做 alwaysOn 笔记全带 + 标签/标题包含匹配（不做语义检索、不打分），**不自动建档、历史默认关闭（`contextEnabled=false`）**。
+- Kotlin 字符串模板 `$x` 后面紧跟中文标点（如 `」`、`）`）会被解析成标识符的一部分，导致 `Unresolved reference` 编译错误；**一律写成 `${x}`**。D 阶段在 `KbStore.kt` / `KbSelfCheck.kt` 踩过。
 
 ## 目录与文件锁
 
@@ -42,6 +45,7 @@
 | `app/`、`gradle/`、根 gradle 文件 | Android 构建方 | 安卓工程 |
 | `tools/jev/` | Jev 判断方 | Python 题目集与校准脚手架，PC 上跑 |
 | `docs/` | 主控 | 验收标准、报告 |
+| `docs/v1.3-plan.md` | 主控 | v1.3 总方案与修订，**所有 worker 必读** |
 | `_reports/` | 所有人 | 每个任务的交付报告写这里 |
 
 跨边界的问题**只报告，不改**，由主控收口。
