@@ -64,10 +64,10 @@
 
 ## 下载安装
 
-不想自己编译，直接装仓库里编好的包：[`apk/jev-assistant-v1.1-release.apk`](apk/jev-assistant-v1.1-release.apk)（2026-09-21 构建，release 签名，Android 11+）。
+不想自己编译，直接装仓库里编好的包：[`apk/jev-assistant-v1.2-release.apk`](apk/jev-assistant-v1.2-release.apk)（2026-09-21 构建，release 签名，Android 11+）。
 
 ```bash
-adb install -r apk/jev-assistant-v1.1-release.apk
+adb install -r apk/jev-assistant-v1.2-release.apk
 ```
 
 之前装过 debug 包的要先卸载再装（签名不同，覆盖会失败），卸载会清掉已填的密钥和设置。小米 / HyperOS 重装后悬浮窗权限会被重置，装完按主页向导再开一次。
