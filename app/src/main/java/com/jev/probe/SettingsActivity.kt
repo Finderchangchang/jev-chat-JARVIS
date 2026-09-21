@@ -20,6 +20,8 @@ import androidx.appcompat.app.AppCompatActivity
 import com.jev.probe.core.ChatSnapshot
 import com.jev.probe.core.Msg
 import com.jev.probe.core.Prefs
+import com.jev.probe.feishu.FeishuClient
+import com.jev.probe.feishu.FeishuPollerService
 import com.jev.probe.jev.JevClient
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
@@ -61,6 +63,37 @@ class SettingsActivity : AppCompatActivity() {
         val modelEdit = edit(prefs.replyModel, Prefs.DEFAULT_REPLY_MODEL)
         card1.addView(modelEdit)
         root.addView(card1)
+
+        // --- 飞书（可选消息源） ---
+        root.addView(section("飞书"))
+        val cardF = card()
+        val feishuToggle = toggleRow("启用飞书消息源（轮询开放平台）", prefs.feishuEnabled)
+        cardF.addView(feishuToggle)
+        cardF.addView(label("App ID（自建应用）"))
+        val fAppIdEdit = edit(prefs.feishuAppId, "cli_...")
+        cardF.addView(fAppIdEdit)
+        cardF.addView(label("App Secret"))
+        val fSecretEdit = edit(prefs.feishuAppSecret, "应用密钥", password = true)
+        cardF.addView(fSecretEdit)
+        cardF.addView(label("我的 Open ID（区分谁发的消息，可留空）"))
+        val fOpenIdEdit = edit(prefs.feishuMyOpenId, "ou_...")
+        cardF.addView(fOpenIdEdit)
+        cardF.addView(label("轮询间隔（秒，10–300）"))
+        val fPollEdit = edit(prefs.feishuPollSec.toString(), Prefs.DEFAULT_FEISHU_POLL_SEC.toString()).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+        }
+        cardF.addView(fPollEdit)
+        cardF.addView(label("会话白名单（群名关键词，每行一个，空=所有群）"))
+        val fWlEdit = edit(prefs.feishuWhitelist.joinToString("\n"), "留空则监控机器人所在的所有群").apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE; minLines = 2
+        }
+        cardF.addView(fWlEdit)
+        cardF.addView(text(
+            "机器人只能读到它所在的群。飞书后台需：开通机器人能力，授予 im:chat:readonly、" +
+                "im:message:readonly、im:message.group_msg，发布版本并把机器人加进群。",
+            11f, sub
+        ))
+        root.addView(cardF)
 
         // --- 分析 ---
         root.addView(section("分析"))
@@ -105,6 +138,13 @@ class SettingsActivity : AppCompatActivity() {
             prefs.whitelist = wlEdit.text.toString().split("\n").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
             prefs.autoAnalyze = (autoRow.tag as? Boolean) ?: true
             prefs.overlayOpacity = seek.progress + 60
+            prefs.feishuEnabled = (feishuToggle.tag as? Boolean) ?: false
+            prefs.feishuAppId = fAppIdEdit.text.toString()
+            prefs.feishuAppSecret = fSecretEdit.text.toString()
+            prefs.feishuMyOpenId = fOpenIdEdit.text.toString()
+            prefs.feishuPollSec = fPollEdit.text.toString().toIntOrNull() ?: Prefs.DEFAULT_FEISHU_POLL_SEC
+            prefs.feishuWhitelist = fWlEdit.text.toString().split("\n").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+            FeishuPollerService.refresh(this) // 按新配置重启/停止飞书轮询
             Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show()
         })
         root.addView(secondaryBtn("连通测试") {
@@ -120,6 +160,26 @@ class SettingsActivity : AppCompatActivity() {
                     result.text = if (a.error != null) "失败：${a.error}"
                     else "成功：意图=${a.trueIntent?.choice ?: "?"}，候选=${a.rankedReplies.size} 条，耗时 ${a.latencyMs}ms"
                 }
+            }
+        })
+        root.addView(secondaryBtn("飞书连通测试") {
+            val appId = fAppIdEdit.text.toString().trim()
+            val secret = fSecretEdit.text.toString().trim()
+            if (appId.isBlank() || secret.isBlank()) { result.text = "请先填飞书 App ID / Secret"; return@secondaryBtn }
+            result.text = "飞书测试中…"
+            worker.execute {
+                val msg = try {
+                    val c = FeishuClient(appId, secret)
+                    val chats = c.listChats()
+                    if (chats.isEmpty()) "连接成功，但机器人不在任何群里（把机器人加进群再试）"
+                    else {
+                        val first = chats.first()
+                        val latest = c.latestMessages(first.chatId, 3)
+                        val preview = latest.lastOrNull()?.text?.take(30) ?: "（群内暂无消息）"
+                        "连接成功：${chats.size} 个群；最近【${first.name}】：$preview"
+                    }
+                } catch (e: Exception) { "失败：${FeishuClient.readableError(e)}" }
+                main.post { result.text = msg }
             }
         })
         root.addView(result)

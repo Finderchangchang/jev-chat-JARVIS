@@ -16,6 +16,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.jev.probe.core.Prefs
+import com.jev.probe.feishu.FeishuPollerService
 import kotlin.math.roundToInt
 
 /**
@@ -62,16 +63,17 @@ class MainActivity : AppCompatActivity() {
         container.removeAllViews()
 
         container.addView(text("Jev 聊天助手", 24f, ink, bold = true))
-        container.addView(text("在微信旁读对方消息，给出判断和候选回复。发送始终由你手动点。",
+        container.addView(text("在微信/飞书旁读对方消息，给出判断和候选回复。发送始终由你手动点。",
             13f, sub).apply { setPadding(0, dp(6), 0, dp(16)) })
 
         val a11y = isA11yEnabled()
         val overlay = Settings.canDrawOverlays(this)
         val key = prefs.hasKey()
+        val feishu = prefs.feishuEnabled && prefs.hasFeishuCreds()
         val ready = a11y && overlay && key
 
         // Readiness card
-        container.addView(statusCard(ready, a11y, overlay, key))
+        container.addView(statusCard(ready, a11y, overlay, key, feishu))
 
         // Permission checklist
         container.addView(sectionLabel("权限设置"))
@@ -89,7 +91,7 @@ class MainActivity : AppCompatActivity() {
 
         // Actions
         container.addView(sectionLabel("其他"))
-        container.addView(actionRow("设置", "密钥 · 模型 · 关系 · 透明度 · 会话白名单") {
+        container.addView(actionRow("设置", "密钥 · 模型 · 关系 · 透明度 · 会话白名单 · 飞书 API") {
             startActivity(Intent(this, SettingsActivity::class.java))
         })
 
@@ -97,14 +99,18 @@ class MainActivity : AppCompatActivity() {
         val toggle = bigToggle(prefs.enabled)
         toggle.setOnClickListener {
             prefs.enabled = !prefs.enabled
+            FeishuPollerService.refresh(this) // 主开关同步控制飞书轮询的启停
             build()
         }
         container.addView(toggle)
+
+        // 让飞书轮询状态与当前设置保持一致（启动/停止/重读配置）
+        FeishuPollerService.refresh(this)
     }
 
     // ---------------------------------------------------------------- cards
 
-    private fun statusCard(ready: Boolean, a11y: Boolean, overlay: Boolean, key: Boolean): View {
+    private fun statusCard(ready: Boolean, a11y: Boolean, overlay: Boolean, key: Boolean, feishu: Boolean): View {
         val c = cardBox()
         val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         head.addView(dot(if (ready) green else red).apply {
@@ -115,6 +121,7 @@ class MainActivity : AppCompatActivity() {
         c.addView(checkLine("无障碍", a11y))
         c.addView(checkLine("悬浮窗", overlay))
         c.addView(checkLine("密钥", key, okWord = "已设", noWord = "未设"))
+        c.addView(checkLine("飞书消息源", feishu, okWord = "已配置", noWord = "未配置（可选）"))
         return c
     }
 

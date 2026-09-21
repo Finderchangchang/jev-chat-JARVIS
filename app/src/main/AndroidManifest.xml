@@ -47,6 +47,10 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keep the accessibility reader alive on aggressive OEM power management" />
         </service>
+
+        <service
+            android:name=".feishu.FeishuPollerService"
+            android:exported="false" />
     </application>
 
 </manifest>

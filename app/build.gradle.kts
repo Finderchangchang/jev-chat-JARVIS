@@ -36,4 +36,8 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+
+    // 本地单测：android.jar 里的 org.json 是桩（JVM 上不可用），换官方实现
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

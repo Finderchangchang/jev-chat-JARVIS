@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import com.jev.probe.feishu.FeishuPollerService
 
 /**
  * A minimal foreground service whose only job is to keep the app process at
@@ -34,6 +35,8 @@ class KeepAliveService : Service() {
             .setOngoing(true)
             .build()
         startForeground(1, notif)
+        // 进程活了就顺手校准飞书轮询与当前设置的一致性（自启动恢复场景）。
+        runCatching { FeishuPollerService.refresh(this) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY

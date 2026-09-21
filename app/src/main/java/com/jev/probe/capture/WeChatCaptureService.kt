@@ -24,6 +24,9 @@ import java.util.concurrent.RejectedExecutionException
  *
  * It never sends a message. The only write action is ACTION_SET_TEXT to fill the
  * WeChat input box when the user taps "填入"; the user still presses send.
+ *
+ * The overlay is the process-wide singleton shared with FeishuPollerService;
+ * while a Feishu analysis is on screen, leaving WeChat must not hide it.
  */
 open class WeChatCaptureService : AccessibilityService() {
 
@@ -48,8 +51,8 @@ open class WeChatCaptureService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         prefs = Prefs(this)
-        overlay = OverlayController(this)
-        overlay?.onManualAnalyze = {
+        overlay = OverlayController.get(this)
+        overlay?.setManualHandler("wechat") {
             currentSnapshot?.let { pendingSnapshot = it; runAnalysis() }
         }
         // Keep the process at foreground importance so MIUI does not freeze us.
@@ -75,7 +78,8 @@ open class WeChatCaptureService : AccessibilityService() {
             val fg = rootInActiveWindow?.packageName?.toString()
             if (fg != null && fg != WECHAT) {
                 foregroundPkg = fg
-                main.post { overlay?.hide() }
+                // 飞书分析正显示时不藏——它不依赖前台窗口，用户可能在别的 App 里看分析。
+                main.post { if (overlay?.currentSource != "feishu") overlay?.hide() }
                 return
             }
         }
@@ -94,6 +98,7 @@ open class WeChatCaptureService : AccessibilityService() {
         if (snapshot.messages.isEmpty()) return
         if (!prefs.isAllowed(snapshot.title)) { main.post { overlay?.hide() }; return }
 
+        overlay?.currentSource = "wechat" // 本会话内容归微信源所有（影响共享悬浮窗的隐藏/路由）
         currentSnapshot = snapshot
         val sig = snapshot.signature()
         val showing = overlay?.isShowing() == true
@@ -276,7 +281,7 @@ open class WeChatCaptureService : AccessibilityService() {
         super.onDestroy()
         // Tear the overlay down and cut its callback so a stale button tap can
         // never call back into this dead instance.
-        overlay?.onManualAnalyze = null
+        overlay?.setManualHandler("wechat", null)
         overlay?.hide()
         overlay = null
         worker.shutdownNow()

@@ -3,10 +3,14 @@ package com.jev.probe.core
 /** One captured chat bubble. side is "me" (right) or "other" (left). */
 data class Msg(val side: String, val text: String)
 
-/** A snapshot of the currently-open WeChat conversation. */
+/**
+ * A snapshot of the currently-analyzed conversation.
+ * source: "wechat" (accessibility capture, default) or "feishu" (Open API poll).
+ */
 data class ChatSnapshot(
     val title: String?,
-    val messages: List<Msg>
+    val messages: List<Msg>,
+    val source: String = "wechat"
 ) {
     val latestFrom: String? get() = messages.lastOrNull()?.side
 

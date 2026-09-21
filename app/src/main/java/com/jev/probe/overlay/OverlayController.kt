@@ -34,8 +34,12 @@ import kotlin.math.roundToInt
  * Design goals: let the chat show through (adjustable opacity), keep the signal
  * scannable (danger badge + intent headline + reply cards), and stay out of the
  * way (draggable bubble that snaps to the edge and remembers its position).
+ *
+ * Process-wide singleton: the WeChat capture service and the Feishu poller share
+ * one bubble; whichever source analyzed last owns the panel content. Manual
+ * re-analyze is routed by [currentSource] to the owning service.
  */
-class OverlayController(private val ctx: Context) {
+class OverlayController private constructor(private val ctx: Context) {
 
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val prefs = Prefs(ctx)
@@ -47,7 +51,18 @@ class OverlayController(private val ctx: Context) {
     private var expanded = false
     private var lp: WindowManager.LayoutParams? = null
 
-    var onManualAnalyze: (() -> Unit)? = null
+    /** 当前内容来源："wechat" / "feishu"。决定离开微信时藏不藏气泡、手动分析由谁接手。 */
+    var currentSource: String? = null
+
+    /** 来源标签（展示用），如「飞书 · 测试群」；微信模式保持 null（外观不变）。 */
+    var sourceTag: String? = null
+
+    private val manualHandlers = HashMap<String, () -> Unit>()
+
+    /** 注册/注销某来源的「手动分析」处理器（重新分析按钮按 currentSource 路由）。 */
+    fun setManualHandler(source: String, handler: (() -> Unit)?) {
+        if (handler == null) manualHandlers.remove(source) else manualHandlers[source] = handler
+    }
 
     /** Whether the overlay window is currently on screen. */
     fun isShowing(): Boolean = root != null
@@ -266,7 +281,7 @@ class OverlayController(private val ctx: Context) {
 
     fun showIdle(title: String?) {
         ensureRoot(); bubble?.alpha = 0.55f
-        if (lastJudgment == null) setContent(listOf(bigButton("分析当前对话") { onManualAnalyze?.invoke() }))
+        if (lastJudgment == null) setContent(listOf(bigButton("分析当前对话") { manualAnalyze() }))
     }
 
     private fun bigButton(label: String, onClick: () -> Unit) = TextView(ctx).apply {
@@ -323,6 +338,9 @@ class OverlayController(private val ctx: Context) {
         ensureRoot(); bubble?.alpha = 1f
         panel?.background = card(18, panelBg(), stroke = true) // re-apply in case opacity changed
         val views = ArrayList<View>()
+
+        // 来源标签（仅飞书等第二消息源显示）。
+        sourceTag?.let { views.add(hint(it)) }
 
         // Danger badge — the alarm signal, up top and color-coded.
         a.dangerLevel?.let {
@@ -422,7 +440,12 @@ class OverlayController(private val ctx: Context) {
         text = "重新分析"; textSize = 13f; gravity = Gravity.CENTER
         setTextColor(Color.parseColor("#6B7280"))
         setPadding(dp(10), dp(10), dp(10), dp(4))
-        setOnClickListener { onManualAnalyze?.invoke() }
+        setOnClickListener { manualAnalyze() }
+    }
+
+    /** 按当前内容来源路由手动分析；来源还没注册处理器就不动作。 */
+    private fun manualAnalyze() {
+        currentSource?.let { src -> manualHandlers[src]?.invoke() }
     }
 
     private fun tintBubbleDanger(score: Double) {
@@ -470,6 +493,14 @@ class OverlayController(private val ctx: Context) {
     }
 
     companion object {
+        @Volatile private var instance: OverlayController? = null
+
+        /** 进程内单例：微信采集与飞书轮询共享同一个气泡，内容互相替换。 */
+        fun get(ctx: Context): OverlayController =
+            instance ?: synchronized(this) {
+                instance ?: OverlayController(ctx.applicationContext).also { instance = it }
+            }
+
         private val INTENT = mapOf(
             "confirm_you_care" to "确认你在不在乎", "vent_anger" to "在发泄情绪",
             "request_action" to "要你办事", "seek_explanation" to "要个解释",

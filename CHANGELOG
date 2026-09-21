@@ -1,0 +1,5 @@
+# CHANGELOG
+
+- [2026-09-21 06:02] FEAT: 新增飞书消息源——开放平台官方 API（tenant token 缓存刷新 / 群列表 / 会话历史消息 / 单条详情，全部只读）轮询接入同一条 Jev 分析管线；共享悬浮窗改进程单例并按来源（wechat/feishu）路由隐藏与手动分析；飞书回复仅复制、绝不代发；新增 JVM 单元测试与 PC 冒烟脚本；docs 同步 (Files: app/src/main/java/com/jev/probe/feishu/FeishuModels.kt, app/src/main/java/com/jev/probe/feishu/FeishuClient.kt, app/src/main/java/com/jev/probe/feishu/FeishuPollerService.kt, app/src/test/java/com/jev/probe/feishu/FeishuMapperTest.kt, app/src/test/java/com/jev/probe/feishu/FeishuClientTest.kt, app/src/main/java/com/jev/probe/core/ChatModels.kt, app/src/main/java/com/jev/probe/core/Prefs.kt, app/src/main/java/com/jev/probe/overlay/OverlayController.kt, app/src/main/java/com/jev/probe/capture/WeChatCaptureService.kt, app/src/main/java/com/jev/probe/capture/KeepAliveService.kt, app/src/main/java/com/jev/probe/SettingsActivity.kt, app/src/main/java/com/jev/probe/MainActivity.kt, app/src/main/AndroidManifest.xml, app/build.gradle.kts, tools/feishu/smoke_test.py, docs/feishu.md, README.md)
+- [2026-09-21 06:10] CHORE: 拍板执行——创建 feat/feishu-api 分支提交本次全部变更并推送 origin，经 GitHub API 向上游（Finderchangchang/jev-chat-JARVIS）发起 PR (Files: -)
+
