@@ -6,6 +6,8 @@
 >
 > **发送始终由你手动点。** 程序只读消息、只把回复填进输入框，从不自动发送、不碰转账/红包/收款。
 
+> **联系方式：请公众号私信**（二维码见文末「交流群 / 需求收集」）。
+
 <p align="center"><em>A non-invasive, real-time conversation-understanding layer that sits beside any chat surface. It reads whatever conversation is on screen (no app integration, no account), uses Jev for typed judgments plus a generative model for 3 ranked candidate replies, shows them in a translucent overlay, and fills the input box — you press send. WeChat on Android is just the first platform we proved it on.</em></p>
 
 ## 项目目标
@@ -121,6 +123,11 @@ adb install -r apk/jev-assistant-v1.1-release.apk
 
 ## 交流群 / 需求收集
 
+> ### 📮 如需联系，请公众号私信
+> 合作、反馈、进群失败、二维码过期，都走公众号私信，其它渠道不一定看得到。
+>
+> <p align="center"><img src="docs/images/wechat-mp.png" width="200" alt="公众号二维码" /></p>
+
 项目刚起步，想听真实需求：你在哪个聊天 App 上最想要这个副驾？希望它判断什么、怎么提示、什么绝对不能碰？扫码进微信群直接说。
 
 **1 群已满，不要再扫。** 2、3、4 群任选一个加入，**请勿重复加入**，内容完全一样。
@@ -132,4 +139,4 @@ adb install -r apk/jev-assistant-v1.1-release.apk
   <td align="center"><img src="docs/images/wechat-group-4.png" width="170" alt="jev-chat-JARVIS 4 群" /><br/>4 群</td>
 </tr></table>
 
-二维码 7 天有效（本批到 2026-09-28），过期了请开一个 [issue](https://github.com/Finderchangchang/jev-chat-JARVIS/issues) 留言，会更新。
+群二维码 7 天有效（本批到 2026-09-28），过期了**公众号私信**要新码，会更新。
