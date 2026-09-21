@@ -36,9 +36,13 @@ private fun findTitleInActionBar(
     root: AccessibilityNodeInfo,
     firstBubbleTop: Int,
     width: Int,
-    res: Resources
+    res: Resources,
+    minCenterRatio: Double = 0.25,
+    maxCenterRatio: Double = 0.75
 ): String? {
     val actionBarMax = minOf(firstBubbleTop, (res.displayMetrics.heightPixels * 0.14).toInt())
+    val minCenterX = (width * minCenterRatio).toInt()
+    val maxCenterX = (width * maxCenterRatio).toInt()
     val stack = ArrayDeque<AccessibilityNodeInfo>()
     stack.addLast(root)
     var best: String? = null
@@ -50,7 +54,7 @@ private fun findTitleInActionBar(
         val text = node.text?.toString()
         if (!text.isNullOrBlank() && text.length <= 24 && !looksLikeTimestamp(text)) {
             val b = Rect(); node.getBoundsInScreen(b)
-            if (b.bottom in 1 until actionBarMax && b.centerX() in (width / 4)..(width * 3 / 4)) {
+            if (b.bottom in 1 until actionBarMax && b.centerX() in minCenterX..maxCenterX) {
                 if (b.top < bestTop) { bestTop = b.top; best = text }
             }
         }
@@ -219,4 +223,111 @@ class FeishuAdapter : ChatAppAdapter {
             id.endsWith(":id/kb_rich_text_content") ||
             id.endsWith(":id/thread_title_tv") ||
             id.endsWith(":id/thread_subtitle_tv")
+}
+
+/** Trailing "8:11 上午" / "10:29 下午" / "8:11 AM" stamp X glues onto a message. */
+private val X_TAIL_TIME = Regex("""\d{1,2}[:：]\d{2}\s*(上午|下午|AM|PM|am|pm)?$""")
+
+/** X uses "。" as a field separator, so a message can end with a run of them. */
+private val X_TRAILING_DOTS = Regex("""。+$""")
+
+/**
+ * Split one X DM row's contentDescription into (sender, body).
+ *
+ * "你：你这个说的就是那个虚拟人物，是吗？。8:11 上午。Read。"
+ *      → ("你", "你这个说的就是那个虚拟人物，是吗？")
+ * "你：他这个东西开源应该问题不大。。。Read。"
+ *      → ("你", "他这个东西开源应该问题不大")
+ * "All-In：附加的帖子。。"          → ("All-In", "附加的帖子")
+ *
+ * The sender is everything before the FIRST separator (full-width "：" in the
+ * Chinese UI, ": " as a rough fallback elsewhere); the rest is the body plus
+ * chrome — the read receipt, the timestamp, and the "。" gluing them on — which
+ * is stripped from the tail in that order. Punctuation the user actually typed
+ * ("是吗？") survives. Null when there is no separator or nothing is left.
+ */
+private fun parseXDesc(desc: String): Pair<String, String>? {
+    val full = desc.indexOf('：')
+    val half = desc.indexOf(": ")
+    val cut: Int
+    val skip: Int
+    when {
+        full >= 0 && (half < 0 || full <= half) -> { cut = full; skip = 1 }
+        half >= 0 -> { cut = half; skip = 2 }
+        else -> return null
+    }
+    val sender = desc.substring(0, cut).trim()
+    var body = desc.substring(cut + skip).trim()
+    for (tail in arrayOf("Read。", "Read", "已读。", "已读")) {
+        if (body.endsWith(tail)) { body = body.removeSuffix(tail).trim(); break }
+    }
+    body = X_TRAILING_DOTS.replace(body, "").trim()
+    X_TAIL_TIME.find(body)?.let { body = body.substring(0, it.range.first).trim() }
+    body = X_TRAILING_DOTS.replace(body, "").trim()
+    if (sender.isEmpty() || body.isEmpty()) return null
+    return sender to body
+}
+
+/**
+ * X / Twitter (com.twitter.android) direct messages. Verified on X 12.25.2 /
+ * Xiaomi 14 (1200x2670), Chinese system language.
+ *
+ * The DM thread is Compose UI: each message is a bare `android.view.View` with
+ * NO resource-id, full screen width and empty text — the whole message lives in
+ * contentDescription ("All-In：重新写了一个😂。10:29 下午。"). The date divider is a
+ * TextView with no "：", so filtering on class + full width + a separator keeps
+ * it out. An attachment row ("All-In：附加的帖子。。") nests the quoted post's own
+ * TextViews; we only take the row View's own desc, never its children.
+ *
+ * Every screen runs under the same MainActivity, so "are we in a DM thread" can
+ * only be answered by the tree: a thread has the message EditText, the DM list
+ * does not. The list's rows look similar but read
+ * "All-In, @all_in_2026, 你这个说的就是那…", so ", @" is an extra guard.
+ *
+ * Side comes from the sender label ("你" / "You"), not geometry — every row is
+ * full width no matter who spoke.
+ */
+class XAdapter : ChatAppAdapter {
+    override val pkg = "com.twitter.android"
+
+    override fun extract(root: AccessibilityNodeInfo, res: Resources): ChatSnapshot? {
+        val width = res.displayMetrics.widthPixels
+        val rows = ArrayList<Row>()
+        var firstRowTop = Int.MAX_VALUE
+        var hasInput = false
+
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(root)
+        var guard = 0
+        while (stack.isNotEmpty() && guard < 6000) {
+            guard++
+            val node = stack.removeLast()
+            val cls = node.className?.toString()
+            if (!hasInput && (node.isEditable || cls == "android.widget.EditText")) hasInput = true
+
+            val desc = node.contentDescription?.toString()
+            if (cls == "android.view.View" && !desc.isNullOrBlank() && !desc.contains(", @")) {
+                val b = Rect(); node.getBoundsInScreen(b)
+                if (b.left == 0 && b.right == width) {
+                    val parsed = parseXDesc(desc)
+                    if (parsed != null) {
+                        rows.add(Row(b.top, parsed.first, parsed.second))
+                        if (b.top < firstRowTop) firstRowTop = b.top
+                    }
+                }
+            }
+            for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
+        }
+        // No input box → this is the DM list (or some other X screen), not a chat.
+        if (!hasInput || rows.isEmpty()) return null
+
+        // X left-aligns the thread title (x≈300..443 of 1200), so widen the
+        // shared helper's "roughly centered" band for this app.
+        val title = findTitleInActionBar(root, firstRowTop, width, res, 0.15, 0.85)
+        rows.sortBy { it.top }
+        val msgs = rows.map { Msg(if (it.sender == "你" || it.sender == "You") "me" else "other", it.text) }
+        return ChatSnapshot(title, msgs)
+    }
+
+    private data class Row(val top: Int, val sender: String, val text: String)
 }
