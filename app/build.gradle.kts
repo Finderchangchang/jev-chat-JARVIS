@@ -1,6 +1,17 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+// Release signing: reads a properties file kept OUTSIDE the repo
+// (storeFile / storePassword / keyAlias / keyPassword). Override the path with
+// the JEV_KEYSTORE_PROPS env var. Without it, release builds are unsigned.
+val releaseProps = Properties().apply {
+    val f = file(System.getenv("JEV_KEYSTORE_PROPS") ?: "H:/android/keys/jev-release.properties")
+    if (f.exists()) FileInputStream(f).use { load(it) }
 }
 
 android {
@@ -15,9 +26,21 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        if (releaseProps.isNotEmpty()) {
+            create("release") {
+                storeFile = file(releaseProps.getProperty("storeFile"))
+                storePassword = releaseProps.getProperty("storePassword")
+                keyAlias = releaseProps.getProperty("keyAlias")
+                keyPassword = releaseProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 

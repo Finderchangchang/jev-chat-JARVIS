@@ -62,13 +62,13 @@
 
 ## 下载安装
 
-不想自己编译，直接装仓库里编好的包：[`apk/jev-assistant-v1.0-debug.apk`](apk/jev-assistant-v1.0-debug.apk)（2026-09-21 构建，debug 签名，Android 11+）。
+不想自己编译，直接装仓库里编好的包：[`apk/jev-assistant-v1.0-release.apk`](apk/jev-assistant-v1.0-release.apk)（2026-09-21 构建，release 签名，Android 11+）。
 
 ```bash
-adb install -r apk/jev-assistant-v1.0-debug.apk
+adb install -r apk/jev-assistant-v1.0-release.apk
 ```
 
-小米 / HyperOS 重装后悬浮窗权限会被重置，装完按主页向导再开一次。
+之前装过 debug 包的要先卸载再装（签名不同，覆盖会失败），卸载会清掉已填的密钥和设置。小米 / HyperOS 重装后悬浮窗权限会被重置，装完按主页向导再开一次。
 
 ## 构建
 
@@ -78,6 +78,11 @@ adb install -r apk/jev-assistant-v1.0-debug.apk
 # 用 JAVA_HOME 指向 JDK 17，local.properties 里写 sdk.dir
 ./gradlew assembleDebug
 # 产物：app/build/outputs/apk/debug/app-debug.apk
+
+# release 签名包：把密钥库信息写在仓库外的 properties 文件里
+# （storeFile / storePassword / keyAlias / keyPassword），路径由 JEV_KEYSTORE_PROPS 指定
+./gradlew assembleRelease
+# 产物：app/build/outputs/apk/release/app-release.apk
 ```
 
 ## 配置与授权
