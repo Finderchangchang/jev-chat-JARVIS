@@ -12,31 +12,34 @@
 
 [官网](https://chatjevs.com) · [下载 APK](apk/jev-assistant-v1.3-release.apk) · [历史版本](https://github.com/jev-chat/jev-chat-jarvis/releases) · [更新日志](CHANGELOG.md) · [macOS 版](https://github.com/jev-chat/jev-chat-mac) · [Windows 版](https://github.com/jev-chat/jev-chat-windows)
 
+</div>
+
+## ❤️ 赞助商
+
+<details open>
+<summary><b>点击折叠</b></summary>
+
 <table>
+<tr>
+<td width="180" align="center"><b>小优店铺</b></td>
+<td>感谢 <b>小优店铺</b> 赞助了本项目！小优店铺是一家数字商品与账号服务店铺，为本项目的用户提供选购渠道。前往 <a href="https://faka.rainlanguage.top">faka.rainlanguage.top</a> 了解。</td>
+</tr>
+<tr>
+<td width="180" align="center"><b>想出现在这里？</b></td>
+<td>项目免费开源，服务器、真机测试和模型调用都是自费。长期赞助可以在 README 顶部这个位置展示品牌 logo、一句话介绍和链接。请公众号私信联系，二维码见<a href="#交流群--需求收集">文末</a>。</td>
+</tr>
+</table>
+
+</details>
+
+## 截图
+
+<table align="center">
 <tr>
 <td align="center"><img src="docs/images/overlay.png" width="300" alt="悬浮窗：聊天上方的 Jev 分析面板" /><br/><sub>悬浮窗：危险等级、对方真实意图、排好序的 3 条候选回复</sub></td>
 <td align="center"><img src="docs/images/settings.png" width="300" alt="设置页" /><br/><sub>设置页：判断 / 回复 / 视觉三路接口分别可配</sub></td>
 </tr>
 </table>
-
-</div>
-
----
-
-## 赞助
-
-项目免费开源，服务器、真机测试和模型调用都是自费。下面的赞助商支持了这个项目的持续开发：
-
-<table>
-<tr>
-<td width="180" align="center"><b>小优店铺</b></td>
-<td>数字商品与账号服务店铺。<a href="https://faka.rainlanguage.top">faka.rainlanguage.top</a></td>
-</tr>
-</table>
-
-**想成为赞助商**：README 顶部的位置向长期赞助者开放，可以放品牌名、一句话介绍和链接。请公众号私信联系（二维码见[文末](#交流群--需求收集)）。
-
----
 
 ## 为什么用它
 
