@@ -19,7 +19,10 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.jev.probe"
+        // Opt-in isolated package for device regression tests; keep the installed app's data intact.
+        applicationId = if (providers.gradleProperty("isolatedDeviceTest").isPresent)
+            "com.jev.probe.devicetest" else "com.jev.probe"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 30
         targetSdk = 35
         versionCode = 4
@@ -68,9 +71,14 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    sourceSets.getByName("androidTest").java.srcDir("src/test/java")
 }
 
 dependencies {
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
     testImplementation("junit:junit:4.13.2")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
