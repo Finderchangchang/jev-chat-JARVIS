@@ -3,6 +3,7 @@
     android:accessibilityEventTypes="typeAllMask"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
     android:notificationTimeout="100"
     android:isAccessibilityTool="true"
     android:description="@string/a11y_desc_disguised" />

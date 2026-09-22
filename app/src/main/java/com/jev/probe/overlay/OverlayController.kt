@@ -49,11 +49,28 @@ class OverlayController(private val ctx: Context) {
 
     var onManualAnalyze: (() -> Unit)? = null
 
+    /** Bubble menu → file the open conversation as a knowledge-base contact. */
+    var onSaveContact: (() -> Unit)? = null
+
+    /** Bubble menu → one manual screenshot + OCR of whatever app is open. */
+    var onOcrCapture: (() -> Unit)? = null
+
+    /** How much knowledge context the last analysis actually used. */
+    private var ctxNotes = 0
+    private var ctxHistory = 0
+
+    /** A caveat about how the current snapshot was captured (OCR mode). */
+    private var noteText: String? = null
+
     /** Whether the overlay window is currently on screen. */
     fun isShowing(): Boolean = root != null
 
     private var lastJudgment: Analysis? = null
     private var lastFill: ((String) -> Unit)? = null
+
+    /** Set when [showReplies] was handed a draftAndRank failure, so the panel
+     *  can say so instead of silently showing "（未生成候选回复）". */
+    private var replyError: String? = null
 
     private fun dp(v: Int) = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), ctx.resources.displayMetrics).roundToInt()
@@ -221,8 +238,10 @@ class OverlayController(private val ctx: Context) {
             background = card(12, panelBg(), stroke = true)
             elevation = dp(8).toFloat()
             setPadding(dp(4), dp(4), dp(4), dp(4))
-            layoutParams = FrameLayout.LayoutParams(dp(150), ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(56) }
+            layoutParams = FrameLayout.LayoutParams(dp(196), ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(56) }
         }
+        menu.addView(menuItem("截屏识别一次") { root?.removeView(menu); onOcrCapture?.invoke() })
+        menu.addView(menuItem("把当前会话存为联系人") { onSaveContact?.invoke(); root?.removeView(menu) })
         menu.addView(menuItem("打开设置") { openSettings(); root?.removeView(menu) })
         menu.addView(menuItem("隐藏助手（本次）") { hide() })
         menu.addView(menuItem("取消") { root?.removeView(menu) })
@@ -268,7 +287,30 @@ class OverlayController(private val ctx: Context) {
 
     fun showIdle(title: String?) {
         ensureRoot(); bubble?.alpha = 0.55f
-        if (lastJudgment == null) setContent(listOf(bigButton("分析当前对话") { onManualAnalyze?.invoke() }))
+        // Either there is genuinely nothing to show yet, or the panel is empty
+        // for some other reason (root got rebuilt after hide(), leaving
+        // contentBox with zero children while lastJudgment still points at a
+        // stale conversation) — either way an empty panel must never stay
+        // literally blank.
+        if (lastJudgment == null || contentBox?.childCount == 0) {
+            setContent(listOf(bigButton("分析当前对话") { onManualAnalyze?.invoke() }))
+        }
+    }
+
+    /**
+     * Drop whatever judgment/candidates/note belonged to the previous
+     * conversation. Call this before showing anything for a different chat
+     * window (a different app, or new content in the same one) — otherwise a
+     * leftover [lastJudgment] from a prior conversation can keep [showIdle]
+     * from putting the "分析当前对话" button back, and a leftover [lastFill]
+     * could fill the wrong chat's input box.
+     */
+    fun resetForNewConversation() {
+        lastJudgment = null
+        lastFill = null
+        noteText = null
+        replyError = null
+        contentBox?.removeAllViews()
     }
 
     private fun bigButton(label: String, onClick: () -> Unit) = TextView(ctx).apply {
@@ -283,8 +325,28 @@ class OverlayController(private val ctx: Context) {
 
     fun showLoading() {
         ensureRoot(); bubble?.alpha = 1f
+        ctxNotes = 0; ctxHistory = 0   // counts for the round that is starting
+        replyError = null              // this round has not failed (yet)
         setContent(listOf(hint("分析中…")))
         if (!expanded) toggle()
+    }
+
+    /** How many knowledge notes / history lines went into the pending analysis. */
+    fun setContextInfo(notes: Int, history: Int) {
+        ctxNotes = notes; ctxHistory = history
+    }
+
+    /** A caveat line for the panel (OCR mode); null clears it. */
+    fun setNote(note: String?) {
+        noteText = note
+    }
+
+    /**
+     * Take the overlay out of the picture for one screenshot. INVISIBLE, not
+     * removed: the window (and everything on it) must survive the round trip.
+     */
+    fun setHiddenForShot(hidden: Boolean) {
+        root?.visibility = if (hidden) View.INVISIBLE else View.VISIBLE
     }
 
     fun showError(msg: String) {
@@ -299,8 +361,9 @@ class OverlayController(private val ctx: Context) {
         render(a, generating = true)
     }
 
-    fun showReplies(ranked: List<RankedReply>, onFill: (String) -> Unit) {
+    fun showReplies(ranked: List<RankedReply>, error: String? = null, onFill: (String) -> Unit) {
         lastFill = onFill
+        replyError = error
         val a = lastJudgment?.copy(rankedReplies = ranked) ?: return
         lastJudgment = a
         render(a, generating = false)
@@ -325,6 +388,14 @@ class OverlayController(private val ctx: Context) {
         ensureRoot(); bubble?.alpha = 1f
         panel?.background = card(18, panelBg(), stroke = true) // re-apply in case opacity changed
         val views = ArrayList<View>()
+
+        // What context this read was based on (knowledge base / remembered history).
+        views.add(hint(
+            if (ctxNotes == 0 && ctxHistory == 0) "未用知识库"
+            else "知识库 $ctxNotes 条 · 历史 $ctxHistory 条"))
+
+        // How this snapshot was captured, when it changes how to read it.
+        noteText?.let { if (it.isNotBlank()) views.add(hint(it)) }
 
         // Danger badge — the alarm signal, up top and color-coded.
         a.dangerLevel?.let {
@@ -354,7 +425,10 @@ class OverlayController(private val ctx: Context) {
             a.rankedReplies.forEachIndexed { i, r ->
                 views.add(replyCard(i + 1, r.text, (r.prob * 100).roundToInt(), fill))
             }
-            if (a.rankedReplies.isEmpty()) views.add(hint("（未生成候选回复）"))
+            if (a.rankedReplies.isEmpty()) {
+                val msg = replyError?.let { "回复接口出错：$it" } ?: "（未生成候选回复）"
+                views.add(hint(msg))
+            }
         }
         views.add(reAnalyzeBtn())
 

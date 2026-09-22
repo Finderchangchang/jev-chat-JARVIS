@@ -1,6 +1,7 @@
 package com.jev.probe.jev
 
 import com.jev.probe.core.ChatSnapshot
+import com.jev.probe.core.kb.LogEntry
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -12,21 +13,29 @@ import org.json.JSONObject
  */
 object JevQuestions {
 
+    /**
+     * Appended to every question so the D-stage `background` field (relationship,
+     * contact notes, knowledge-base hits) reads as given context rather than as
+     * an off-topic digression that should be penalized.
+     */
+    const val BACKGROUND_NOTE =
+        " Facts given in background are provided context, not off-topic."
+
     private fun noul(instructions: String, t: String, f: String) = JSONObject().apply {
         put("type", "noul")
-        put("instructions", instructions)
+        put("instructions", instructions + BACKGROUND_NOTE)
         put("criteria", JSONObject().put("true", t).put("false", f))
     }
 
     private fun choice(instructions: String, criteria: Map<String, String>) = JSONObject().apply {
         put("type", "choice")
-        put("instructions", instructions)
+        put("instructions", instructions + BACKGROUND_NOTE)
         put("criteria", JSONObject().also { c -> criteria.forEach { (k, v) -> c.put(k, v) } })
     }
 
     private fun score(instructions: String, levels: List<String>) = JSONObject().apply {
         put("type", "score")
-        put("instructions", instructions)
+        put("instructions", instructions + BACKGROUND_NOTE)
         put("criteria", JSONArray().also { a -> levels.forEach { a.put(it) } })
     }
 
@@ -157,8 +166,23 @@ object JevQuestions {
         ))
     }
 
-    /** Build Jev state from a snapshot (last 10 messages). */
-    fun buildState(snapshot: ChatSnapshot, relationship: String): JSONObject {
+    /**
+     * Build Jev state from a snapshot (last 10 messages), optionally carrying
+     * the D-stage knowledge context.
+     *
+     * @param background relationship + contact notes + matched knowledge notes.
+     * @param history older messages for this contact, already de-duplicated
+     *        against what is on screen.
+     *
+     * Both extra fields are omitted when empty, so a user with no knowledge base
+     * sends exactly the same body v1.2 did.
+     */
+    fun buildState(
+        snapshot: ChatSnapshot,
+        relationship: String,
+        background: String = "",
+        history: List<LogEntry> = emptyList()
+    ): JSONObject {
         val msgs = JSONArray()
         val last10 = snapshot.messages.takeLast(10)
         for (m in last10) {
@@ -168,7 +192,14 @@ object JevQuestions {
             .put("relationship", relationship)
             .put("messages", msgs)
             .put("latest_from", last10.lastOrNull()?.side ?: "other")
-        return JSONObject().put("chat", chat)
+        val state = JSONObject().put("chat", chat)
+        if (background.isNotBlank()) state.put("background", background)
+        if (history.isNotEmpty()) {
+            val h = JSONArray()
+            history.forEach { h.put(JSONObject().put("from", it.side).put("text", it.text)) }
+            state.put("history", h)
+        }
+        return state
     }
 
     /** The best_reply ranking question over exactly 3 candidates (Chinese text kept). */
@@ -185,7 +216,7 @@ object JevQuestions {
                     "Prefer a reply that matches the best action type. " +
                     "Penalize dismissive, over-promising, or off-topic replies. " +
                     "If the facts are not yet confirmed, prefer the candidate that looks them up " +
-                    "instead of faking memory or a vague apology.")
+                    "instead of faking memory or a vague apology." + BACKGROUND_NOTE)
             put("criteria", criteria)
         }
         return JSONObject().put("best_reply", q)
