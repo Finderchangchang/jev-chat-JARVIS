@@ -88,6 +88,9 @@ object HttpJson {
                 }
                 val text = readBody(conn.inputStream)
                 if (text.isBlank()) throw ApiException(route, code, "响应体为空")
+                if (text.trimStart().startsWith("<")) {
+                    throw ApiException(route, code, "接口返回了网页 HTML；请填写 API 根地址或 /v1 地址，不要填写网站首页")
+                }
                 return JSONObject(text)
             } catch (e: ApiException) {
                 if (e.status != null && e.status in 400..499) throw e  // client error: no retry
