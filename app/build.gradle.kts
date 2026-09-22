@@ -78,4 +78,9 @@ dependencies {
     // On-device OCR. The *bundled* Chinese model (not the play-services variant):
     // it works on phones with no Google Play services and needs no model download.
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+
+    // The setup verdict (PowerSetup) is pure Kotlin on purpose: the rules about
+    // what a ROM needs before the assistant survives must be verifiable without
+    // a phone attached.
+    testImplementation("junit:junit:4.13.2")
 }

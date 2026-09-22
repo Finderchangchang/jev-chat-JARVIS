@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- HyperOS / MIUI freeze a background accessibility service within seconds
+         unless the app is exempt from battery optimisation. The setup screen asks
+         for the exemption through ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="false"
