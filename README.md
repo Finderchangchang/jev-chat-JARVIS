@@ -4,7 +4,7 @@
 
 已在 **微信、QQ、X（Twitter 私信）** 三个平台真机跑通，飞书采集已接入。一套内核，一个 App 一个几十行的适配器。
 
-**联系 / 反馈 / 合作：请公众号私信**（二维码见文末）。
+**联系 / 反馈 / 合作：请公众号私信**（二维码见文末）。 官网：[chatjevs.com](https://chatjevs.com)
 
 <p align="center">
   <img src="docs/images/overlay.png" width="300" alt="悬浮窗：聊天上方的 Jev 分析面板" />
@@ -137,8 +137,9 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
 
 这个项目和几个朋友的 AI 工具放在同一个组织 [jev-chat](https://github.com/jev-chat) 下面：
 
+- [Jev 聊天助手 macOS 版](https://github.com/jev-chat/jev-chat-mac)：微信消息意图识别悬浮窗，看屏 + 本地小模型判断意图和风险，再按话术生成回复候选，纯只读。
+- [Jev 聊天助手 Windows 版](https://github.com/jev-chat/jev-chat-windows)：微信 Windows 4.x 旁挂的回复辅助，窗口截图 + 本地离线 OCR，3 条候选一键填入，发送永远手动。
 - [微墨 WeChat Ink](https://github.com/Snowwit88/wechat-ink)：微信公众号写作、配图与排版助手，支持资料核验、学术风图文和草稿发布。
-
 ## 免责声明与许可
 
 仅供个人学习与研究使用。只处理你自己设备上、你自己有权查看的聊天。请遵守微信、QQ、X、飞书等各软件的许可协议与当地法律法规，作者不对使用后果负责。代码以 [MIT](LICENSE) 协议开源。
