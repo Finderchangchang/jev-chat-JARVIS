@@ -39,7 +39,9 @@ class OverlayController(private val ctx: Context) {
 
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val prefs = Prefs(ctx)
-    private var root: FrameLayout? = null
+    /** Written only from the main thread, but read by the capture and self-heal
+     *  workers through [isShowing], so it must be volatile. */
+    @Volatile private var root: FrameLayout? = null
     private var bubble: TextView? = null
     private var dangerDot: View? = null
     private var panel: LinearLayout? = null
@@ -64,6 +66,14 @@ class OverlayController(private val ctx: Context) {
 
     /** Whether the overlay window is currently on screen. */
     fun isShowing(): Boolean = root != null
+
+    /**
+     * True while the user has asked the bubble to stay away ("隐藏助手（本次）").
+     * Read by the capture service's self-heal backstop: that backstop exists to
+     * undo a bubble the *system* dropped, never a hide the user asked for.
+     */
+    @Volatile var dismissedForNow = false
+        private set
 
     private var lastJudgment: Analysis? = null
     private var lastFill: ((String) -> Unit)? = null
@@ -243,7 +253,7 @@ class OverlayController(private val ctx: Context) {
         menu.addView(menuItem("截屏识别一次") { root?.removeView(menu); onOcrCapture?.invoke() })
         menu.addView(menuItem("把当前会话存为联系人") { onSaveContact?.invoke(); root?.removeView(menu) })
         menu.addView(menuItem("打开设置") { openSettings(); root?.removeView(menu) })
-        menu.addView(menuItem("隐藏助手（本次）") { hide() })
+        menu.addView(menuItem("隐藏助手（本次）") { hideForNow() })
         menu.addView(menuItem("取消") { root?.removeView(menu) })
         root?.addView(menu)
     }
@@ -324,6 +334,7 @@ class OverlayController(private val ctx: Context) {
     }
 
     fun showLoading() {
+        dismissedForNow = false
         ensureRoot(); bubble?.alpha = 1f
         ctxNotes = 0; ctxHistory = 0   // counts for the round that is starting
         replyError = null              // this round has not failed (yet)
@@ -350,6 +361,7 @@ class OverlayController(private val ctx: Context) {
     }
 
     fun showError(msg: String) {
+        dismissedForNow = false
         ensureRoot(); bubble?.alpha = 1f
         setContent(listOf(
             line("出错了", "#DC2626", 14f, true),
@@ -357,6 +369,7 @@ class OverlayController(private val ctx: Context) {
     }
 
     fun showJudgment(a: Analysis) {
+        dismissedForNow = false
         lastJudgment = a
         render(a, generating = true)
     }
@@ -375,6 +388,16 @@ class OverlayController(private val ctx: Context) {
         val r = root ?: return
         runCatching { wm.removeView(r) }
         root = null; bubble = null; panel = null; contentBox = null; dangerDot = null; expanded = false
+    }
+
+    /**
+     * The bubble menu's "隐藏助手（本次）": [hide], plus a record that the user
+     * asked for it. Cleared by anything the user drives explicitly (an analysis
+     * or an error to read), so the choice is respected until then.
+     */
+    fun hideForNow() {
+        dismissedForNow = true
+        hide()
     }
 
     // --------------------------------------------------------------- rendering

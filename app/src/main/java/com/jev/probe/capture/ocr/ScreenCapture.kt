@@ -9,6 +9,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.view.Display
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -20,6 +21,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Contract: [capture] is called on the main thread and answers on the main
  * thread, exactly once, with either a software [Result.Ok] bitmap or a
  * [Result.Failed] carrying a sentence the overlay can show as-is.
+ *
+ * The shot itself is NOT taken on the main thread. On MIUI/HyperOS the
+ * `takeScreenshot*` call can block for seconds (13.4s measured on a real
+ * device, issue #18). Issued from the main thread it froze the whole UI and —
+ * worse — the watchdog meant to restore the overlay was posted behind it on the
+ * same blocked thread, so the bubble stayed INVISIBLE until the call returned.
+ * That is the "悬浮窗长时间消失，无法自动恢复" of issue #20. The call now runs on
+ * [shotExecutor] and the watchdog is armed before the shot is handed over, so
+ * the overlay comes back within [HIDE_SETTLE_MS] + [TIMEOUT_MS] no matter what
+ * the platform call does.
  *
  * Three things here exist because the platform bites otherwise:
  * - The result arrives as a [android.hardware.HardwareBuffer]. It must be copied
@@ -73,44 +84,49 @@ class ScreenCapture(
         lastAttemptAt = now
 
         val done = AtomicBoolean(false)
+        // Everything that settles a shot goes through here, and every path ends
+        // on the main thread: the overlay is touched (INVISIBLE -> VISIBLE) and
+        // the callers' callbacks drive views. Settling exactly once is what keeps
+        // a late platform callback from touching an already-finished shot.
         val finish: (Result) -> Unit = { r ->
             if (done.compareAndSet(false, true)) {
-                restoreOverlay()
-                if (r is Result.Ok) failStreak = 0
-                else failStreak = (failStreak + 1).coerceAtMost(MAX_STREAK)
-                onResult(r)
+                main.post {
+                    restoreOverlay()
+                    if (r is Result.Ok) failStreak = 0
+                    else failStreak = (failStreak + 1).coerceAtMost(MAX_STREAK)
+                    onResult(r)
+                }
             }
         }
+
+        // Watchdog FIRST, shot second — never the other way round. Armed after
+        // the shot, a blocking platform call would leave the bubble INVISIBLE
+        // (issue #20). The deadline is measured from here, so the shot thread
+        // cannot postpone it either.
+        val timeout = Runnable { finish(Result.Failed(CODE_TIMEOUT, humanMessage(CODE_TIMEOUT))) }
+        main.postDelayed(timeout, HIDE_SETTLE_MS + TIMEOUT_MS)
 
         // Hide the bubble, give the compositor a frame to drop it, then shoot.
         runCatching { hideOverlay() }
-        main.postDelayed({ shoot(finish, done) }, HIDE_SETTLE_MS)
+        main.postDelayed({
+            try {
+                shotExecutor.execute { shoot(finish, timeout, done) }
+            } catch (e: Throwable) {
+                main.removeCallbacks(timeout)
+                finish(Result.Failed(CODE_INTERNAL, "截屏失败：${e.javaClass.simpleName}"))
+            }
+        }, HIDE_SETTLE_MS)
     }
 
-    private fun shoot(finish: (Result) -> Unit, done: AtomicBoolean) {
-        val exec = service.mainExecutor
-        // Which area the picture will cover. Set just before the window shot is
-        // issued and read inside the callback, so the mapping always matches the
-        // call that actually produced the bitmap.
-        var windowBounds: Rect? = null
-        // The system can simply never call back (seen when a shot lands on a
-        // protected window during a transition). Without this the overlay stays
-        // INVISIBLE and the caller's busy flag is stuck until the service dies.
-        val timeout = Runnable { finish(Result.Failed(CODE_TIMEOUT, humanMessage(CODE_TIMEOUT))) }
-        val cb = object : AccessibilityService.TakeScreenshotCallback {
-            override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
-                main.removeCallbacks(timeout)
-                // Already timed out: this result is void. Drop the buffer (never
-                // leak it) and do not touch the caller a second time.
-                if (done.get()) { runCatching { result.hardwareBuffer.close() }; return }
-                finish(toBitmap(result, windowBounds))
-            }
-            override fun onFailure(errorCode: Int) {
-                main.removeCallbacks(timeout)
-                finish(Result.Failed(errorCode, humanMessage(errorCode)))
-            }
-        }
-
+    /**
+     * Runs on [shotExecutor], never on the main thread. [timeout] is the watchdog
+     * [capture] has already armed; a callback that does arrive cancels it.
+     *
+     * The system can simply never call back (seen when a shot lands on a
+     * protected window during a transition) — the watchdog is what covers that,
+     * and it no longer depends on this method returning.
+     */
+    private fun shoot(finish: (Result) -> Unit, timeout: Runnable, done: AtomicBoolean) {
         // API 34+: shooting just the active window is cheaper and is allowed on
         // some OEM builds that refuse a whole-display capture. Fall back to the
         // display shot when the window id is unknown or the call is unavailable.
@@ -118,26 +134,50 @@ class ScreenCapture(
             val node = runCatching { service.rootInActiveWindow }.getOrNull()
             val windowId = node?.windowId
             if (windowId != null && windowId != -1) {
-                windowBounds = runCatching {
+                // Which area this particular call will cover. Handed to the
+                // callback as a value instead of kept in a field, so the mapping
+                // can only ever describe the call that produced the bitmap, and
+                // the shot thread never shares mutable state with the callback.
+                val bounds = runCatching {
                     val r = Rect()
                     node.window?.getBoundsInScreen(r)
                     r
                 }.getOrNull()?.takeIf { it.width() > 0 && it.height() > 0 }
                 try {
-                    service.takeScreenshotOfWindow(windowId, exec, cb)
-                    main.postDelayed(timeout, TIMEOUT_MS)
+                    service.takeScreenshotOfWindow(
+                        windowId, service.mainExecutor, callback(finish, timeout, done, bounds))
                     return
                 } catch (e: Throwable) {
-                    windowBounds = null
                     Log.w(TAG, "takeScreenshotOfWindow unavailable: ${e.javaClass.simpleName}")
                 }
             }
         }
         try {
-            service.takeScreenshot(Display.DEFAULT_DISPLAY, exec, cb)
-            main.postDelayed(timeout, TIMEOUT_MS)
+            service.takeScreenshot(
+                Display.DEFAULT_DISPLAY, service.mainExecutor, callback(finish, timeout, done, null))
         } catch (e: Throwable) {
             finish(Result.Failed(CODE_INTERNAL, "截屏失败：${e.javaClass.simpleName}"))
+        }
+    }
+
+    /** One callback object per call, carrying that call's [bounds] (null = whole display). */
+    private fun callback(
+        finish: (Result) -> Unit,
+        timeout: Runnable,
+        done: AtomicBoolean,
+        bounds: Rect?
+    ) = object : AccessibilityService.TakeScreenshotCallback {
+        override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
+            main.removeCallbacks(timeout)
+            // Already timed out: this result is void. Drop the buffer (never
+            // leak it) and do not touch the caller a second time.
+            if (done.get()) { runCatching { result.hardwareBuffer.close() }; return }
+            finish(toBitmap(result, bounds))
+        }
+
+        override fun onFailure(errorCode: Int) {
+            main.removeCallbacks(timeout)
+            finish(Result.Failed(errorCode, humanMessage(errorCode)))
         }
     }
 
@@ -172,6 +212,16 @@ class ScreenCapture(
 
     companion object {
         private const val TAG = "JEVASSIST"
+
+        /**
+         * Where the screenshot calls run. A single thread shared by every
+         * instance: the throttle and the failure backoff are global anyway, and
+         * one shot at a time is all the platform allows. Daemon, so a torn-down
+         * service never keeps the process alive through this thread.
+         */
+        private val shotExecutor = Executors.newSingleThreadExecutor { r ->
+            Thread(r, "jev-screenshot").apply { isDaemon = true }
+        }
 
         /** Our own throttle, not a platform code. */
         const val CODE_THROTTLED = -1

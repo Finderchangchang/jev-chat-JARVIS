@@ -6,6 +6,7 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -14,7 +15,9 @@ import com.jev.probe.capture.ocr.OcrLine
 import com.jev.probe.capture.ocr.ScreenCapture
 import com.jev.probe.core.BubbleRect
 import com.jev.probe.core.ChatSnapshot
+import com.jev.probe.core.ForegroundLeaveGate
 import com.jev.probe.core.Msg
+import com.jev.probe.core.OverlaySelfHealPolicy
 import com.jev.probe.core.Prefs
 import com.jev.probe.core.kb.ContextBuilder
 import com.jev.probe.core.kb.KbStore
@@ -22,6 +25,7 @@ import com.jev.probe.jev.JevClient
 import com.jev.probe.overlay.OverlayController
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The live capture service (registered under a disguised class name so WeChat
@@ -53,9 +57,26 @@ open class ChatCaptureService : AccessibilityService() {
     private lateinit var prefs: Prefs
     private var overlay: OverlayController? = null
 
-    private var lastSignature: String = ""
-    private var activePkg: String? = null
+    @Volatile private var lastSignature: String = ""
+    @Volatile private var activePkg: String? = null
     private var analyzing = false
+
+    /** Hide the bubble only after "we left the chat app" has held this long. */
+    private val leaveGate = ForegroundLeaveGate(FOREGROUND_CONFIRM_MS)
+
+    /** Backstop that puts the bubble back when nothing else does. */
+    private val selfHeal = OverlaySelfHealPolicy()
+
+    /**
+     * Capture passes run here, one at a time — see [requestCapture]. Separate
+     * from [worker] so a slow tree read can never starve the analysis calls, and
+     * vice versa.
+     */
+    private val captureWorker = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "jev-capture").apply { isDaemon = true }
+    }
+    private val captureQueued = AtomicBoolean(false)
+    private val captureRunning = AtomicBoolean(false)
 
     /** Last known-good (non-transient) title per package. See [isTransientTitle]:
      *  a page like X's DM thread briefly shows "连接中…" as `snapshot.title`
@@ -64,12 +85,22 @@ open class ChatCaptureService : AccessibilityService() {
      *  next real title for that package simply replaces it. */
     private val lastGoodTitle: MutableMap<String, String> = HashMap()
     private val debounce = Runnable { runAnalysis() }
-    private var pendingSnapshot: ChatSnapshot? = null
+    @Volatile private var pendingSnapshot: ChatSnapshot? = null
     @Volatile private var currentSnapshot: ChatSnapshot? = null
-    private var foregroundPkg: String? = null
+    @Volatile private var foregroundPkg: String? = null
 
-    // ---- OCR path (B stage). Everything here runs on the main thread: the
-    // screenshot callback and the ML Kit callback are both posted back to it.
+    /**
+     * Whether the conversation currently in front passes the whitelist. Kept
+     * apart from [currentSnapshot] on purpose: that snapshot is only ever updated
+     * for chats the whitelist allows, so asking about its title for a disallowed
+     * chat would tell the self-heal backstop about the previous conversation.
+     */
+    @Volatile private var foregroundAllowed: Boolean = true
+
+    // ---- OCR path (B stage). A capture pass runs on the capture worker; the
+    // shot itself is started from the main thread (ScreenCapture's contract — it
+    // hides the overlay first), and the screenshot and ML Kit callbacks are both
+    // posted back to the main thread.
     private val screenCapture by lazy {
         ScreenCapture(this,
             hideOverlay = { overlay?.setHiddenForShot(true) },
@@ -80,7 +111,7 @@ open class ChatCaptureService : AccessibilityService() {
 
     /** What the screen looked like the last time we fired an automatic shot.
      *  See [ocrSignature]: this is the brake on the OCR path. */
-    private var lastOcrSignature: String = ""
+    @Volatile private var lastOcrSignature: String = ""
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -115,15 +146,27 @@ open class ChatCaptureService : AccessibilityService() {
         // HyperOS may kill and restart us. On (re)connect, proactively re-show the
         // bubble for whatever chat is already open, so it comes back on its own
         // instead of waiting for the user to scroll.
-        main.postDelayed({ if (prefs.enabled) runCatching { maybeCapture() } }, 900)
+        main.postDelayed({ if (prefs.enabled) requestCapture() }, 900)
+        // Backstop timer: a chat screen that sits still produces no accessibility
+        // events, so once the bubble had been taken away nothing ever brought it
+        // back (issue #20). This re-shows it within HEAL_INTERVAL_MS.
+        main.removeCallbacks(healCheck)
+        main.postDelayed(healCheck, HEAL_INTERVAL_MS)
         Log.i(TAG, "capture service connected")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        if (!prefs.enabled) { main.post { overlay?.hide() }; return }
+        if (!prefs.enabled) { leaveGate.reset(); main.post { overlay?.hide() }; return }
 
         val type = event.eventType
+        // Our own overlay redraws ("分析中…" -> the result) emit these two types
+        // for our package. Reacting to them made the service wake itself up and
+        // read the tree again on its own redraws (issue #18 §1.4).
+        if (event.packageName?.toString() == packageName && (
+                type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+                type == AccessibilityEvent.TYPE_VIEW_SCROLLED)) return
+
         // Decide "did we leave the chat app" from the REAL active window, not the
         // event's package. The event package can be an IME (e.g. com.tencent.wetype)
         // or the status bar while the chat app is still foreground — keying off it
@@ -137,22 +180,155 @@ open class ChatCaptureService : AccessibilityService() {
         // The bubble does come off for places where it would only be in the way:
         // our own settings screens, the launcher, and the system UI.
         if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val fg = rootInActiveWindow?.packageName?.toString()
-            if (fg != null && fg !in adapters) {
-                foregroundPkg = fg
-                val drop = fg == packageName ||
-                    fg.contains("launcher", ignoreCase = true) ||
-                    fg == "com.miui.home" ||
-                    fg == "com.android.systemui"
-                main.post { if (drop) overlay?.hide() else overlay?.showIdle(null) }
-                return
+            // Read the active window off the main thread: it is a binder call, and
+            // tree reads on the main thread are what left the bubble drawn but
+            // untappable (issue #18 §1.6).
+            submit {
+                val fg = rootInActiveWindow?.packageName?.toString()
+                main.post { evaluateLeave(fg, alsoCapture = true) }
             }
+            return
         }
 
         when (type) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
-            AccessibilityEvent.TYPE_VIEW_SCROLLED -> maybeCapture()
+            AccessibilityEvent.TYPE_VIEW_SCROLLED -> requestCapture()
+        }
+    }
+
+    /**
+     * Acts on the package that is in front. Runs on the main thread, because it
+     * touches the overlay.
+     *
+     * [alsoCapture] is true for a window-state change, which used to fall through
+     * to [maybeCapture] — a window change is also how a chat window coming to the
+     * front is noticed.
+     */
+    private fun evaluateLeave(fg: String?, alsoCapture: Boolean) {
+        if (!prefs.enabled) { leaveGate.reset(); return }
+        if (fg == null) { if (alsoCapture) requestCapture(); return }
+        if (fg in adapters) {
+            leaveGate.onChatApp()
+            if (alsoCapture) requestCapture()
+            return
+        }
+        foregroundPkg = fg
+        if (!isPermanentLeave(fg)) {
+            // Some other app we have no adapter for: park the idle bubble there, so
+            // "截屏识别一次" stays reachable.
+            leaveGate.onChatApp()
+            overlay?.showIdle(null)
+            return
+        }
+        // Confirmed leave only after FOREGROUND_CONFIRM_MS. A heads-up
+        // notification, the shade edge, a gesture hint or a window mid-animation
+        // briefly becomes the active window, and hiding on the first sighting took
+        // the bubble away on every swipe (issue #18 §1.2).
+        val now = SystemClock.elapsedRealtime()
+        leaveGate.onForeign(fg, now)
+        if (leaveGate.shouldHide(now)) {
+            leaveGate.reset()
+            overlay?.hide()
+        } else {
+            scheduleLeaveCheck()
+        }
+    }
+
+    /** Places the bubble leaves for good: our own screens, the launcher, the shade. */
+    private fun isPermanentLeave(fg: String): Boolean =
+        fg == packageName ||
+            fg.contains("launcher", ignoreCase = true) ||
+            fg == "com.miui.home" ||
+            fg == "com.android.systemui"
+
+    /** Exactly one re-check, at the moment the pending leave's window elapses. */
+    private fun scheduleLeaveCheck() {
+        val wait = leaveGate.remainingMs(SystemClock.elapsedRealtime()) ?: return
+        main.removeCallbacks(leaveCheck)
+        main.postDelayed(leaveCheck, wait + LEAVE_RECHECK_SLACK_MS)
+    }
+
+    private val leaveCheck = Runnable {
+        if (!prefs.enabled) return@Runnable
+        submit {
+            val fg = rootInActiveWindow?.packageName?.toString()
+            main.post { evaluateLeave(fg, alsoCapture = false) }
+        }
+    }
+
+    // ------------------------------------------------------- capture scheduling
+
+    /**
+     * Ask for a capture pass. Events arrive in bursts (one scroll emits dozens)
+     * and the tree read is a binder call that can block for seconds, so passes
+     * are coalesced: one runs at a time and a burst collapses into the running
+     * pass plus at most one trailing pass.
+     *
+     * This is also why the read left the main thread — it used to run inside
+     * [onAccessibilityEvent], so a list scroll froze the process while the bubble
+     * was still drawn: visible but untappable (issue #18 §1.6).
+     */
+    private fun requestCapture() {
+        captureQueued.set(true)
+        pumpCapture()
+    }
+
+    private fun pumpCapture() {
+        if (!captureRunning.compareAndSet(false, true)) return
+        try {
+            captureWorker.execute {
+                try {
+                    while (captureQueued.compareAndSet(true, false)) {
+                        runCatching { maybeCapture() }.onFailure {
+                            Log.w(TAG, "capture pass failed: ${it.javaClass.simpleName}")
+                        }
+                    }
+                } finally {
+                    captureRunning.set(false)
+                    // An event that landed between the last drain and the flag being
+                    // cleared would otherwise be lost.
+                    if (captureQueued.get()) pumpCapture()
+                }
+            }
+        } catch (e: Throwable) {
+            captureRunning.set(false)
+        }
+    }
+
+    /**
+     * Backstop for a bubble that should be on screen and is not: the system
+     * dropped the window, our own [OverlayController.hide] left the user on a chat
+     * screen that produces no further events, or the process was frozen and
+     * restarted by the ROM (issue #20). One foreground read per tick, and nothing
+     * at all while the assistant is switched off.
+     */
+    private val healCheck: Runnable = Runnable { runHealTick() }
+
+    private fun runHealTick() {
+        if (prefs.enabled) {
+            submit {
+                val fg = rootInActiveWindow?.packageName?.toString()
+                val title = currentSnapshot?.title
+                val showing = overlay?.isShowing() == true
+                main.post { decideHeal(fg, title, showing) }
+            }
+        }
+        main.postDelayed(healCheck, HEAL_INTERVAL_MS)
+    }
+
+    private fun decideHeal(fg: String?, title: String?, showing: Boolean) {
+        val heal = selfHeal.shouldHeal(
+            enabled = prefs.enabled,
+            inAdaptedChatApp = fg != null && fg in adapters,
+            allowed = foregroundAllowed && prefs.isAllowed(title),
+            showing = showing,
+            dismissedByUser = overlay?.dismissedForNow == true,
+            nowMs = SystemClock.elapsedRealtime())
+        if (heal) {
+            Log.i(TAG, "overlay self-heal: bubble was gone, re-showing")
+            overlay?.showIdle(title)
+        } else if (showing) {
+            selfHeal.onShowing()
         }
     }
 
@@ -167,7 +343,11 @@ open class ChatCaptureService : AccessibilityService() {
         // Stabilize the title BEFORE anything below reads it: some apps (X) show
         // a transient "连接中…" title for a moment right after opening a thread.
         val snapshot = stabilizeTitle(pkg ?: "", rawSnapshot)
-        if (!prefs.isAllowed(snapshot.title)) { main.post { overlay?.hide() }; return }
+        if (!prefs.isAllowed(snapshot.title)) {
+            foregroundAllowed = false
+            main.post { overlay?.hide() }
+            return
+        }
         // In a chat window but the tree holds no text (Feishu draws its bodies,
         // WeChat hides them when the disguise fails) → screenshot + OCR, subject
         // to ScreenCapture's own >=1s throttle and failure backoff.
@@ -183,7 +363,9 @@ open class ChatCaptureService : AccessibilityService() {
                 val sig = ocrSignature(pkg ?: "", snapshot.title, snapshot.bubbleRects)
                 if (sig == lastOcrSignature && overlay?.isShowing() == true) return
                 lastOcrSignature = sig
-                ocrCapture(snapshot.title, snapshot.bubbleRects, pkg ?: "", manual = false)
+                // ScreenCapture hides the overlay before shooting, so it has to be
+                // started from the main thread — this pass runs on captureWorker.
+                main.post { ocrCapture(snapshot.title, snapshot.bubbleRects, pkg ?: "", manual = false) }
             }
             return
         }
@@ -193,6 +375,7 @@ open class ChatCaptureService : AccessibilityService() {
         if (pkg != activePkg) { activePkg = pkg; lastSignature = "" }
 
         currentSnapshot = snapshot
+        foregroundAllowed = true
         val sig = snapshot.signature()
         val showing = overlay?.isShowing() == true
         // Same content and the bubble is already up → nothing to do.
@@ -445,10 +628,11 @@ open class ChatCaptureService : AccessibilityService() {
             if (manual) overlay?.showError("这一屏没认出文字")
             return
         }
-        if (!prefs.isAllowed(snapshot.title)) { overlay?.hide(); return }
+        if (!prefs.isAllowed(snapshot.title)) { foregroundAllowed = false; overlay?.hide(); return }
 
         if (pkg.isNotEmpty() && pkg != activePkg) { activePkg = pkg; lastSignature = "" }
         currentSnapshot = snapshot
+        foregroundAllowed = true
         val sig = snapshot.signature()
         // Manual taps always re-run; the automatic path dedupes like the tree path.
         if (!manual && sig == lastSignature) {
@@ -564,11 +748,33 @@ open class ChatCaptureService : AccessibilityService() {
         overlay?.onOcrCapture = null
         overlay?.hide()
         overlay = null
+        main.removeCallbacks(leaveCheck)
+        main.removeCallbacks(healCheck)
+        leaveGate.reset()
         worker.shutdownNow()
+        captureWorker.shutdownNow()
     }
 
     companion object {
         private const val TAG = "JEVASSIST"
+
+        /**
+         * How long "the foreground is no longer a chat app" must hold before the
+         * bubble is hidden. Long enough to ride out a heads-up notification, the
+         * shade edge or a window mid-animation; short enough that leaving WeChat
+         * for the launcher still puts the bubble away promptly.
+         */
+        private const val FOREGROUND_CONFIRM_MS = 1_500L
+
+        /** Slack on the single re-check armed for a pending leave. */
+        private const val LEAVE_RECHECK_SLACK_MS = 50L
+
+        /**
+         * How often the backstop looks for a bubble that should be up but is not.
+         * One binder call per tick, and nothing at all while the assistant is
+         * switched off, so this is not a wake-up source to worry about.
+         */
+        private const val HEAL_INTERVAL_MS = 8_000L
 
         /** Whole-screen OCR keeps the middle: no action bar, no input area. */
         private const val TOP_CROP = 0.12f
