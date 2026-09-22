@@ -11,11 +11,16 @@ import android.util.Log
  * Key handling: stored in app-private SharedPreferences (not world-readable,
  * never logged, never in code/git). Only key *lengths* are ever logged.
  */
-class Prefs(context: Context) {
+class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
 
-    private val sp = context.getSharedPreferences("jev_assistant", Context.MODE_PRIVATE)
+    private val sp = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
 
-    init { migrateIfNeeded() }
+    /**
+     * Only the real config migrates — and only the real config logs it. The
+     * throwaway instances behind the settings test buttons and the KB self-check
+     * have nothing to carry over, and used to print one migration line per tap.
+     */
+    init { if (prefsName == PREFS_MAIN) migrateIfNeeded() }
 
     /**
      * v1.2 -> v1.3: the single `openrouter_key` becomes the judge route's key.
@@ -219,6 +224,9 @@ class Prefs(context: Context) {
 
     companion object {
         private const val TAG = "JEVASSIST"
+
+        /** The one real config file. Anything else is a scratch instance. */
+        const val PREFS_MAIN = "jev_assistant"
 
         private const val K_LEGACY_KEY = "openrouter_key"
         private const val K_MIGRATED_V13 = "prefs_migrated_v13"

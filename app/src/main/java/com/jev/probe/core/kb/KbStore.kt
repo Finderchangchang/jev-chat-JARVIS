@@ -483,32 +483,57 @@ class KbStore private constructor(context: Context) {
 
         fun newId(): String = java.util.UUID.randomUUID().toString().substring(0, 12)
 
-        private val ZERO_WIDTH = Regex("[\\u200B-\\u200D\\uFEFF]")
-        private val TRAILING_COUNT = Regex("[(（]\\s*\\d+\\s*[)）]\\s*$")
+        /**
+         * Compile a pattern without ever taking the class down with it. A
+         * `Regex(...)` straight in a `val` runs during `<clinit>`, so one bad
+         * pattern turns into `ExceptionInInitializerError` and every call into
+         * [KbStore] dies with it — which is exactly what happened on device
+         * (Android's ICU engine rejected the old member-count pattern). A null
+         * here only means that one cleanup step is skipped.
+         */
+        private fun safeRegex(pattern: String): Regex? =
+            runCatching { Regex(pattern) }.getOrElse {
+                Log.w(TAG, "regex init failed: ${it.javaClass.simpleName} ${it.message ?: ""}")
+                null
+            }
+
+        private val ZERO_WIDTH = safeRegex("[\\u200B-\\u200D\\uFEFF]")
+
+        /**
+         * Trailing group member count. Written as an alternation of escaped code
+         * points rather than a character class holding brackets: ICU on device
+         * read `[(...)]` as an unterminated class ("missing closing bracket").
+         * No literal full-width bracket in the source, on purpose.
+         */
+        private val TRAILING_COUNT =
+            safeRegex("\\s*(?:\\(|\\uFF08)\\s*\\d+\\s*(?:\\)|\\uFF09)\\s*$")
+
+        private fun stripZeroWidth(s: String): String = ZERO_WIDTH?.replace(s, "") ?: s
+
+        private fun stripTrailingCount(s: String): String =
+            TRAILING_COUNT?.replace(s, "")?.trim() ?: s
 
         /**
          * Name key for matching: trimmed, zero-width characters removed, the
-         * group member count `(12)` / `（12）` dropped, case-insensitive.
+         * group member count `(12)` (half- or full-width) dropped, lower-cased.
+         * If the patterns failed to compile this degrades to trim + lowercase.
          */
         fun normalizeName(s: String?): String {
             if (s.isNullOrEmpty()) return ""
-            var t = ZERO_WIDTH.replace(s, "").trim()
-            t = TRAILING_COUNT.replace(t, "").trim()
-            return t.lowercase()
+            val t = stripTrailingCount(stripZeroWidth(s).trim())
+            return t.trim().lowercase()
         }
 
         /** Same cleanup as [normalizeName] but keeps the original casing, for display. */
         fun displayName(s: String?): String {
             if (s.isNullOrEmpty()) return ""
-            var t = ZERO_WIDTH.replace(s, "").trim()
-            t = TRAILING_COUNT.replace(t, "").trim()
-            return t
+            return stripTrailingCount(stripZeroWidth(s).trim()).trim()
         }
 
         /** Loose key for substring matching (no member-count stripping). */
         fun normalizeText(s: String?): String {
             if (s.isNullOrEmpty()) return ""
-            return ZERO_WIDTH.replace(s, "").trim().lowercase()
+            return stripZeroWidth(s).trim().lowercase()
         }
     }
 }

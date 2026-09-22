@@ -56,6 +56,7 @@ class KnowledgeActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(22), dp(18), dp(28))
         }
+        container.padForSystemBars()   // edge-to-edge: keep the title off the status bar
         scroll.addView(container)
         setContentView(scroll)
         render()

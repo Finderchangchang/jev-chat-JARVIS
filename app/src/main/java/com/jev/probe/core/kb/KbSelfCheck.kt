@@ -1,8 +1,6 @@
 package com.jev.probe.core.kb
 
 import android.content.Context
-import android.content.ContextWrapper
-import android.content.SharedPreferences
 import com.jev.probe.core.ChatSnapshot
 import com.jev.probe.core.Msg
 import com.jev.probe.core.Prefs
@@ -21,17 +19,34 @@ import com.jev.probe.core.Prefs
 object KbSelfCheck {
 
     private const val SCRATCH_PREFS = "jev_kb_selfcheck_scratch"
+    private const val BARE = "测试群"
     private const val TITLE = "测试群(12)"
     private const val ALIAS = "测试群（12）"          // full-width parens on purpose
+    private const val PADDED = "  测试群  "
     private const val OLD_LINE = "上周说好周五交自检稿"
 
     /** @return a one-line human-readable pass/fail summary. */
     fun run(context: Context): String {
+        val failures = ArrayList<String>()
+
+        // 0. Name normalization, checked first and on its own: its patterns are
+        //    compiled in KbStore's class initializer, and a pattern the device's
+        //    regex engine rejects used to take the whole class (and every
+        //    analysis) down with an ExceptionInInitializerError.
+        runCatching {
+            listOf(TITLE, ALIAS, PADDED, BARE).forEach { raw ->
+                val got = KbStore.normalizeName(raw)
+                if (got != BARE)
+                    failures.add("名称归一化失败：输入 ${raw} 得到 ${got}，应为 ${BARE}")
+            }
+        }.onFailure {
+            failures.add("名称归一化异常：${it.javaClass.simpleName} ${it.message ?: ""}")
+        }
+
         val store = KbStore.get(context)
         val noteId = KbStore.newId()
         val contactId = KbStore.newId()
         val prefs = scratchPrefs(context)
-        val failures = ArrayList<String>()
         try {
             prefs.contextEnabled = true
             prefs.contextHistoryCount = 30
@@ -110,12 +125,9 @@ object KbSelfCheck {
         else "自检失败（${failures.size}）：" + failures.joinToString("；")
     }
 
-    /** A [Prefs] bound to a throwaway SharedPreferences file. */
+    /** A [Prefs] bound to a throwaway SharedPreferences file (no migration, no log). */
     private fun scratchPrefs(context: Context): Prefs {
         context.getSharedPreferences(SCRATCH_PREFS, Context.MODE_PRIVATE).edit().clear().commit()
-        return Prefs(object : ContextWrapper(context) {
-            override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences =
-                super.getSharedPreferences(SCRATCH_PREFS, mode)
-        })
+        return Prefs(context, SCRATCH_PREFS)
     }
 }

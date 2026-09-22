@@ -61,6 +61,7 @@ class SettingsActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(22), dp(18), dp(28))
         }
+        root.padForSystemBars()   // edge-to-edge: keep the title off the status bar
         scroll.addView(root)
 
         root.addView(header("设置"))
@@ -436,14 +437,7 @@ class SettingsActivity : AppCompatActivity() {
      */
     private fun draftPrefs(scratchName: String, fill: Prefs.() -> Unit): Prefs {
         getSharedPreferences(scratchName, MODE_PRIVATE).edit().clear().commit()
-        return Prefs(ScratchContext(this, scratchName)).apply(fill)
-    }
-
-    /** Redirects every SharedPreferences lookup to one named scratch file. */
-    private class ScratchContext(base: android.content.Context, private val scratchName: String) :
-        android.content.ContextWrapper(base) {
-        override fun getSharedPreferences(name: String?, mode: Int): android.content.SharedPreferences =
-            super.getSharedPreferences(scratchName, mode)
+        return Prefs(this, scratchName).apply(fill)
     }
 
     /** 1x1 white JPEG for the vision smoke test, via the real encoder path. */
@@ -540,7 +534,8 @@ class SettingsActivity : AppCompatActivity() {
         setHintTextColor(Color.parseColor("#9CA3AF"))
         background = round(dp(8), Color.parseColor("#F3F4F6"))
         setPadding(dp(10), dp(10), dp(10), dp(10))
-        if (password) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+        // Masked, not VISIBLE_PASSWORD: an API key should not sit in plain sight.
+        if (password) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(2) }
     }
