@@ -146,3 +146,24 @@
     }
   }
 })();
+
+(function () {
+  var JEV = window.JEV || {};
+  var repo = JEV.repo || "https://github.com/jev-chat/jev-chat-jarvis";
+  // GitHub star count (best effort; falls back to the static number in the markup)
+  (function () {
+    var els = document.querySelectorAll("[data-jev-stars]");
+    if (!els.length || !window.fetch) return;
+    var m = /github\.com\/([^/]+\/[^/#?]+)/.exec(repo);
+    if (!m) return;
+    fetch("https://api.github.com/repos/" + m[1], { headers: { Accept: "application/vnd.github+json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || typeof d.stargazers_count !== "number") return;
+        var n = d.stargazers_count;
+        var txt = n >= 1000 ? (Math.round(n / 100) / 10).toFixed(1).replace(/\.0$/, "") + "k" : String(n);
+        for (var i = 0; i < els.length; i++) els[i].textContent = txt;
+      })
+      .catch(function () {});
+  })();
+})();

@@ -503,3 +503,20 @@ ul { margin: 0; padding: 0; list-style: none; }
   .sec-head { margin-bottom: 32px; }
   .cta-band { padding: 64px 0; }
 }
+
+/* GitHub star entry (2026-09-22) */
+.btn-star { background: #24292f; color: #fff; border-color: #24292f; }
+.btn-star:hover { background: #32383f; border-color: #32383f; transform: translateY(-1px); }
+.btn-star .star-count { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.16); font-size: 13px; font-weight: 600; }
+.btn-star .star-count b { font-weight: 700; }
+html[data-theme="dark"] .btn-star { background: #f0f3f6; color: #111; border-color: #f0f3f6; }
+html[data-theme="dark"] .btn-star:hover { background: #fff; border-color: #fff; }
+html[data-theme="dark"] .btn-star .star-count { background: rgba(0,0,0,.1); }
+.star-callout { margin-top: 14px; font-size: 15px; }
+.star-callout a { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent); font-weight: 600; text-decoration: none; transition: background .18s ease, transform .18s ease; }
+.star-callout a:hover { background: var(--accent); color: var(--on-accent); transform: translateY(-1px); }
+.star-callout-arrow { font-weight: 700; }
+.nav-star { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 600; white-space: nowrap; transition: border-color .18s ease, background .18s ease; }
+.nav-star:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.nav-star b { font-weight: 700; }
+@media (max-width: 720px) { .nav-star-text { display: none; } .nav-star { padding: 0 10px; } }
