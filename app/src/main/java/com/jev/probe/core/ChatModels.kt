@@ -32,9 +32,18 @@ data class ChatSnapshot(
 ) {
     val latestFrom: String? get() = messages.lastOrNull()?.side
 
-    /** A stable signature of the last few messages, to detect real changes. */
-    fun signature(): String =
-        messages.takeLast(6).joinToString("|") { "${it.side}:${it.text}" }
+    /**
+     * The conversation title and last six messages identify a captured screen.
+     * App switches reset the signature in the capture service. Length-prefix
+     * each field so punctuation in a title or message cannot mimic a boundary.
+     */
+    fun signature(): String = buildString {
+        append(title?.length ?: -1).append(':').append(title.orEmpty())
+        messages.takeLast(6).forEach {
+            append(it.side.length).append(':').append(it.side)
+            append(it.text.length).append(':').append(it.text)
+        }
+    }
 }
 
 /** Jev's judgment result for one snapshot, plus the ranked candidate replies. */
