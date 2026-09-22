@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme-init>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jev 聊天助手 — 任何聊天里的对话副驾</title>
+<meta name="description" content="Jev 聊天助手是一个开源 Android 对话副驾：读懂对方刚发的消息，给出意图与危险等级判断，起草三条候选回复，一键填进输入框。程序只填不发，发不发由你。微信 / QQ / X 已跑通。">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Jev 聊天助手 — 任何聊天里的对话副驾">
+<meta property="og:description" content="读懂对方、三条回复、一键填入。开源 MIT，Android 11+。程序只填不发。">
+<meta property="og:image" content="assets/og.png">
+<meta property="og:site_name" content="Jev 聊天助手">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Jev 聊天助手 — 任何聊天里的对话副驾">
+<meta name="twitter:description" content="读懂对方、三条回复、一键填入。开源 MIT，Android 11+。">
+<meta name="twitter:image" content="assets/og.png">
+<script>
+  window.JEV = {
+    version: "1.2",
+    apkUrl: "https://github.com/Finderchangchang/jev-chat-JARVIS/raw/main/apk/jev-assistant-v1.2-release.apk",
+    repo: "https://github.com/Finderchangchang/jev-chat-JARVIS"
+  };
+  // 提前应用主题，避免首屏闪白
+  (function () {
+    try {
+      var t = localStorage.getItem("jev-theme");
+      if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap"></noscript>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">跳到主要内容</a>
+
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="Jev 聊天助手 首页">
+      <img src="assets/favicon.svg" alt="" width="30" height="30" class="brand-mark">
+      <span class="brand-name">Jev 聊天助手</span>
+    </a>
+
+    <nav class="nav-menu" id="navMenu" aria-label="主导航">
+      <a href="#features">功能</a>
+      <a href="#platforms">平台</a>
+      <a href="#start">快速开始</a>
+      <a href="#how">原理</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+
+    <div class="nav-actions">
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="切换深浅色主题" title="切换深浅色">
+        <svg class="ico-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><g stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 2.6v2.4M12 19v2.4M2.6 12h2.4M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3L17 7M7 17l-1.7 1.7"/></g></svg>
+        <svg class="ico-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.4A8.6 8.6 0 1 1 9.6 4a7 7 0 0 0 10.4 10.4z" fill="currentColor"/></svg>
+      </button>
+      <a class="icon-btn" data-jev-repo href="#" target="_blank" rel="noopener" aria-label="GitHub 仓库" title="GitHub">
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+      <a class="btn btn-primary btn-sm nav-cta" data-jev-apk href="#">下载 Android 版</a>
+      <button class="icon-btn burger" id="burger" type="button" aria-label="打开菜单" aria-expanded="false" aria-controls="navMenu">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.5 7h17M3.5 12h17M3.5 17h17"/></g></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ===================== HERO ===================== -->
+<section class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <span class="eyebrow reveal">开源 · MIT · Android 11+</span>
+      <h1 class="hero-title reveal">任何聊天里，<br>都有个副驾</h1>
+      <p class="hero-sub reveal">读懂对方、三条回复、一键填入。微信 / QQ / X 已跑通，飞书接入中。</p>
+
+      <div class="cmd reveal" role="group" aria-label="安装命令">
+        <code id="cmdText">adb install -r jev-assistant-v<span data-jev-version>1.2</span>-release.apk</code>
+        <button class="cmd-copy" id="copyBtn" type="button" aria-label="复制命令">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M15 5.5H6.5A2.5 2.5 0 0 0 4 8v8.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span class="cmd-copy-label">复制</span>
+        </button>
+      </div>
+
+      <div class="hero-btns reveal">
+        <a class="btn btn-primary" data-jev-apk href="#">下载 APK v<span data-jev-version>1.2</span></a>
+        <a class="btn btn-ghost" data-jev-repo href="#" target="_blank" rel="noopener">Star on GitHub</a>
+      </div>
+
+      <p class="hero-note reveal">程序只把回复填进输入框，从不自动发送，不碰转账 / 红包 / 收款。</p>
+    </div>
+
+    <div class="hero-visual reveal">
+      <div class="pipeline" aria-hidden="true">
+        <div class="pl-step pl-1"><span class="pl-dot"></span>收到消息</div>
+        <div class="pl-step pl-2"><span class="pl-dot"></span>Jev 判断意图 · 危险等级</div>
+        <div class="pl-step pl-3"><span class="pl-dot"></span>起草 3 条候选</div>
+        <div class="pl-step pl-4"><span class="pl-dot"></span>一键填入输入框</div>
+        <div class="pl-line"><i></i></div>
+      </div>
+
+      <div class="phone">
+        <div class="phone-frame">
+          <div class="phone-notch"></div>
+          <img src="assets/overlay.webp" alt="Jev 聊天助手悬浮窗实拍：显示对方意图判断与三条候选回复" width="900" height="2002" loading="eager" decoding="async">
+        </div>
+        <div class="phone-glow" aria-hidden="true"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== MARQUEE ===================== -->
+<section class="marquee-sec">
+  <div class="wrap"><p class="marquee-title">已在这些 App 里跑通</p></div>
+  <div class="marquee" aria-label="已支持的应用：微信、QQ、X（Twitter）、飞书、任意 App、桌面端规划中">
+    <div class="marquee-track">
+      <span class="chip">微信</span><span class="chip">QQ</span><span class="chip">X（Twitter）</span><span class="chip">飞书（OCR）</span><span class="chip">任意 App（手动 OCR）</span><span class="chip">桌面端（规划中）</span>
+      <span class="chip">微信</span><span class="chip">QQ</span><span class="chip">X（Twitter）</span><span class="chip">飞书（OCR）</span><span class="chip">任意 App（手动 OCR）</span><span class="chip">桌面端（规划中）</span>
+      <span class="chip">微信</span><span class="chip">QQ</span><span class="chip">X（Twitter）</span><span class="chip">飞书（OCR）</span><span class="chip">任意 App（手动 OCR）</span><span class="chip">桌面端（规划中）</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== VALUE ===================== -->
+<section class="sec" id="value">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="reveal">不只会写，先看懂。</h2>
+      <p class="sec-lead reveal">大多数助手直接给你一段话。Jev 先判断这条消息到底是什么，再决定怎么回。</p>
+    </div>
+
+    <div class="grid grid-3">
+      <article class="card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 4.5c4.4 0 7.8 3.4 9 7.5-1.2 4.1-4.6 7.5-9 7.5S4.2 16.1 3 12c1.2-4.1 4.6-7.5 9-7.5z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.8" fill="currentColor"/></svg>
+        </span>
+        <h3>判断</h3>
+        <p>TypeSafe Jev 判断模型一次给出：对方真实意图、危险等级 1–9、对方要什么、该不该马上回、最佳动作。约 1 秒，带把握度。</p>
+      </article>
+
+      <article class="card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="3.5" y="5" width="17" height="4.4" rx="2.2" fill="currentColor"/><rect x="3.5" y="11" width="13" height="4.4" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="3.5" y="17" width="9" height="3" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+        </span>
+        <h3>候选</h3>
+        <p>生成模型（默认 DeepSeek）起草 3 条口语化回复，Jev 按「最合适」重新排序，并给出每条的占比，谁排第一有理由。</p>
+      </article>
+
+      <article class="card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 3.5v11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8 11l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="17.5" width="16" height="3.2" rx="1.6" fill="currentColor"/></svg>
+        </span>
+        <h3>填入</h3>
+        <p>点一下，回复进输入框。程序只填不发，从不自动发送，也不碰转账、红包、收款。最后那一下永远是你按的。</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== COMPARE ===================== -->
+<section class="sec sec-alt" id="compare">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="reveal">Jev 聊天助手 vs 其他方案</h2>
+      <p class="sec-lead reveal">同样是「帮你回消息」，差别在读得到多少、判不判断、以及谁按发送。</p>
+    </div>
+
+    <div class="table-scroll reveal">
+      <table class="cmp">
+        <thead>
+          <tr>
+            <th scope="col" class="cmp-row-head">能力</th>
+            <th scope="col" class="cmp-us">Jev 聊天助手</th>
+            <th scope="col">输入法 / App 自带 AI 回复</th>
+            <th scope="col">通用聊天机器人（复制粘贴）</th>
+            <th scope="col">自动回复机器人</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">先判断再写</th>
+            <td class="cmp-us"><span class="mk yes">✓</span></td>
+            <td><span class="mk no">✗</span></td>
+            <td><span class="mk part">部分</span></td>
+            <td><span class="mk no">✗</span></td>
+          </tr>
+          <tr>
+            <th scope="row">任意聊天 App 都能读</th>
+            <td class="cmp-us"><span class="mk yes">✓</span></td>
+            <td><span class="mk part">部分</span></td>
+            <td><span class="mk no">✗</span></td>
+            <td><span class="mk part">部分</span></td>
+          </tr>
+          <tr>
+            <th scope="row">非侵入，不改客户端</th>
+            <td class="cmp-us"><span class="mk yes">✓</span></td>
+            <td><span class="mk yes">✓</span></td>
+            <td><span class="mk yes">✓</span></td>
+            <td><span class="mk no">✗</span></td>
+          </tr>
+          <tr>
+            <th scope="row">发送由你按</th>
+            <td class="cmp-us"><span class="mk yes">✓</span></td>
+            <td><span class="mk yes">✓</span></td>
+            <td><span class="mk yes">✓</span></td>
+            <td><span class="mk no">✗</span></td>
+          </tr>
+          <tr>
+            <th scope="row">知识库 + 联系人上下文</th>
+            <td class="cmp-us"><span class="mk yes">✓</span></td>
+            <td><span class="mk no">✗</span></td>
+            <td><span class="mk part">部分</span></td>
+            <td><span class="mk part">部分</span></td>
+          </tr>
+          <tr>
+            <th scope="row">接口 / 模型自选</th>
+            <td class="cmp-us"><span class="mk yes">✓</span></td>
+            <td><span class="mk no">✗</span></td>
+            <td><span class="mk no">✗</span></td>
+            <td><span class="mk part">部分</span></td>
+          </tr>
+          <tr>
+            <th scope="row">开源免费</th>
+            <td class="cmp-us"><span class="mk yes">✓</span></td>
+            <td><span class="mk no">✗</span></td>
+            <td><span class="mk no">✗</span></td>
+            <td><span class="mk part">部分</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="cmp-foot reveal">对比按公开可得的常见形态归纳，不针对任何具体产品。</p>
+  </div>
+</section>
+
+<!-- ===================== FEATURES ===================== -->
+<section class="sec" id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="reveal">一个 App，六件事做扎实</h2>
+      <p class="sec-lead reveal">Built for everyday chats — 不是演示用的 demo。</p>
+    </div>
+
+    <div class="grid grid-3">
+      <article class="card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="5" cy="6" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="19" cy="6" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="5" cy="18" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="19" cy="18" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 7l3 3M17 7l-3 3M7 17l3-3M17 17l-3-3" stroke="currentColor" stroke-width="1.5"/></svg>
+        </span>
+        <h3>一套内核，多平台</h3>
+        <p>判断、候选、排序、填入都在同一个内核里。新增一个 App 只需要实现一个几十行的适配器，其余全部复用。</p>
+      </article>
+
+      <article class="card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 3l7.5 3v5.6c0 4.3-3 8-7.5 9.4C7.5 19.6 4.5 15.9 4.5 11.6V6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8.8 12l2.3 2.3 4.1-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <h3>非侵入</h3>
+        <p>不改任何 App 的安装包，不走它们的接口或账号，不读数据库。只用系统无障碍服务读「屏幕上正在显示的对话」。</p>
+      </article>
+
+      <article class="card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H18v16H6.5A1.5 1.5 0 0 1 5 18.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 8.5h6M9 12h6M9 15.5h3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <h3>知识库与关联上下文</h3>
+        <p>本地维护笔记和联系人档案（关系、别名、备注）。分析时自动带上命中的知识和这个人的历史聊天，候选回复与知识库口径一致。联系人可跨 App 关联。</p>
+      </article>
+
+      <article class="card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 12h17" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8.7" r="1.1" fill="currentColor"/><path d="M7.5 15.3h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <h3>读不到就 OCR</h3>
+        <p>控件树里没有正文时自动截屏，用 ML Kit 中文离线识别，不上传图片、不需要 Google 服务。任何 App 都能在悬浮窗菜单里手动「截屏识别一次」。</p>
+      </article>
+
+      <article class="card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 7.5h14M5 12h14M5 16.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="7.5" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="15" cy="12" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="10" cy="16.5" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+        </span>
+        <h3>接口全可配</h3>
+        <p>判断 / 回复 / 视觉三路接口的地址、密钥、模型分别可填。内置 OpenRouter、TypeSafe 直连、DeepSeek 官方、通义兼容预设，各自一键连通测试。只填一把 OpenRouter 密钥就能用。</p>
+      </article>
+
+      <article class="card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="15" r="1.5" fill="currentColor"/></svg>
+        </span>
+        <h3>隐私在本机</h3>
+        <p>密钥只存在 App 私有空间。聊天内容只在分析那一刻发给你配置的模型接口，不落盘、不进日志。历史记录默认关闭，开了也只存本机。</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PLATFORMS ===================== -->
+<section class="sec sec-alt" id="platforms">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="reveal">平台支持</h2>
+      <p class="sec-lead reveal">真机实测为准，版本号是验证时的版本。</p>
+    </div>
+
+    <div class="table-scroll reveal">
+      <table class="plat">
+        <thead>
+          <tr><th scope="col">平台</th><th scope="col">状态</th><th scope="col">说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">微信 Android</th><td><span class="dot ok"></span>全链路</td><td>8.0.78 实测</td></tr>
+          <tr><th scope="row">QQ Android</th><td><span class="dot ok"></span>全链路</td><td>9.3.50 实测</td></tr>
+          <tr><th scope="row">X / Twitter 私信</th><td><span class="dot ok"></span>全链路</td><td>12.25 实测，中文界面</td></tr>
+          <tr><th scope="row">飞书 / Lark</th><td><span class="dot wip"></span>OCR 兜底</td><td>真机验证中</td></tr>
+          <tr><th scope="row">任意其它 App</th><td><span class="dot wip"></span>手动识别</td><td>悬浮窗菜单「截屏识别一次」</td></tr>
+          <tr><th scope="row">桌面端 / 网页</th><td><span class="dot plan"></span>规划中</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== START ===================== -->
+<section class="sec" id="start">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="reveal">三步开始</h2>
+      <p class="sec-lead reveal">装包、填一把密钥、开三个权限。Android 11 及以上。</p>
+    </div>
+
+    <div class="grid grid-3 steps">
+      <article class="card step reveal">
+        <span class="step-no">01</span>
+        <h3>装包</h3>
+        <p>下载 APK 直接安装，Android 11+。也可以用 adb：</p>
+        <div class="cmd cmd-mini">
+          <code>adb install -r jev-assistant-v<span data-jev-version>1.2</span>-release.apk</code>
+        </div>
+        <a class="btn btn-primary btn-sm" data-jev-apk href="#">下载 APK v<span data-jev-version>1.2</span></a>
+      </article>
+
+      <article class="card step reveal">
+        <span class="step-no">02</span>
+        <h3>填密钥</h3>
+        <p>设置 → 接口 → 判断接口填 OpenRouter API Key，其余留空会自动继承。三路接口都能一键测连通。</p>
+        <a class="shot" data-jev-repo href="#" target="_blank" rel="noopener" title="设置页">
+          <img src="assets/settings.webp" alt="Jev 聊天助手设置页：判断 / 回复 / 视觉三路接口的地址、密钥与模型分别可填" width="900" height="2002" loading="lazy" decoding="async">
+        </a>
+      </article>
+
+      <article class="card step reveal">
+        <span class="step-no">03</span>
+        <h3>开权限</h3>
+        <p>无障碍、悬浮窗、自启动 + 省电无限制。小米 / HyperOS 上后两项必做，否则气泡会被冻掉。</p>
+        <ul class="ticks">
+          <li>无障碍服务</li>
+          <li>悬浮窗</li>
+          <li>自启动 + 省电无限制</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== HOW ===================== -->
+<section class="sec sec-alt" id="how">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="reveal">它怎么工作</h2>
+      <p class="sec-lead reveal">从屏幕上的一条消息，到输入框里的一句话，中间只有这几步。</p>
+    </div>
+
+    <div class="flow reveal">
+      <div class="flow-node">
+        <span class="flow-idx">1</span>
+        <h4>采集屏幕消息</h4>
+        <p>无障碍服务读当前对话；读不到就截屏 OCR</p>
+      </div>
+      <span class="flow-arrow" aria-hidden="true"></span>
+      <div class="flow-node flow-split">
+        <span class="flow-idx">2</span>
+        <div class="flow-pair">
+          <div class="flow-half">
+            <h4>Jev 判断</h4>
+            <p>意图 · 危险等级 1–9 · 该不该马上回</p>
+          </div>
+          <div class="flow-half">
+            <h4>生成模型起草</h4>
+            <p>3 条口语化候选回复</p>
+          </div>
+        </div>
+      </div>
+      <span class="flow-arrow" aria-hidden="true"></span>
+      <div class="flow-node">
+        <span class="flow-idx">3</span>
+        <h4>Jev 排序</h4>
+        <p>按「最合适」重排，给出占比</p>
+      </div>
+      <span class="flow-arrow" aria-hidden="true"></span>
+      <div class="flow-node">
+        <span class="flow-idx">4</span>
+        <h4>悬浮窗展示</h4>
+        <p>判断结论 + 三条候选，就在对话旁边</p>
+      </div>
+      <span class="flow-arrow" aria-hidden="true"></span>
+      <div class="flow-node flow-end">
+        <span class="flow-idx">5</span>
+        <h4>复制 / 填入</h4>
+        <p><strong>不发送</strong>，最后那一下由你按</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FAQ ===================== -->
+<section class="sec" id="faq">
+  <div class="wrap wrap-narrow">
+    <div class="sec-head">
+      <h2 class="reveal">常见问题</h2>
+    </div>
+
+    <div class="faq reveal">
+      <details>
+        <summary>会不会自动帮我发送？<span class="acc-ico" aria-hidden="true"></span></summary>
+        <div class="faq-body"><p>不会。程序只把回复填进输入框，从不自动发送，也不碰转账、红包、收款。发不发、怎么改，都是你自己决定。</p></div>
+      </details>
+      <details>
+        <summary>支持 iOS 吗？<span class="acc-ico" aria-hidden="true"></span></summary>
+        <div class="faq-body"><p>暂不支持。当前只有 Android App，需要 Android 11 及以上，因为实现依赖系统的无障碍服务。</p></div>
+      </details>
+      <details>
+        <summary>电脑端 / 网页能用吗？<span class="acc-ico" aria-hidden="true"></span></summary>
+        <div class="faq-body"><p>规划中，还没有可用版本。定位是「全平台对话副驾」，Android 是第一站。</p></div>
+      </details>
+      <details>
+        <summary>要准备什么密钥？<span class="acc-ico" aria-hidden="true"></span></summary>
+        <div class="faq-body"><p>最少一把 OpenRouter API Key 就能跑起来：填在「判断接口」，回复和视觉接口留空会自动继承。也可以三路分开配，内置 OpenRouter、TypeSafe 直连、DeepSeek 官方、通义兼容预设，各自一键测连通。</p></div>
+      </details>
+      <details>
+        <summary>我的聊天内容会被上传吗？<span class="acc-ico" aria-hidden="true"></span></summary>
+        <div class="faq-body"><p>只在分析那一刻发给你自己配置的模型接口，之后不落盘、不进日志。密钥只存在 App 私有空间。历史记录默认关闭，开了也只存在本机。OCR 走的是 ML Kit 中文离线识别，图片不上传。</p></div>
+      </details>
+      <details>
+        <summary>群聊准吗？还有哪些已知限制？<span class="acc-ico" aria-hidden="true"></span></summary>
+        <div class="faq-body">
+          <ul>
+            <li>群聊目前按一对一的方式分析，多人交叉对话时判断会不准。</li>
+            <li>部分国产 ROM 的后台冻结策略可能让悬浮气泡短暂消失，开自启动和省电无限制可缓解。</li>
+            <li>X / Twitter 只在中文界面下验证过。</li>
+          </ul>
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CONTACT ===================== -->
+<section class="sec sec-alt" id="contact">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="reveal">联系与交流</h2>
+      <p class="sec-lead reveal">问题、建议、想接一个新 App，都可以来找。</p>
+    </div>
+
+    <div class="contact-grid">
+      <article class="card contact-card reveal">
+        <img class="qr" src="assets/wechat-mp.webp" alt="Jev 聊天助手微信公众号二维码" width="420" height="420" loading="lazy" decoding="async">
+        <h3>公众号私信</h3>
+        <p>扫码关注，后台私信最直接。</p>
+      </article>
+
+      <article class="card contact-card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8A2.5 2.5 0 0 1 17.5 17H9l-5 3.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        </span>
+        <h3>交流群</h3>
+        <p>群二维码 7 天过期，放在仓库 README 底部，那里会持续更新。</p>
+        <a class="link-arrow" data-jev-readme href="#" target="_blank" rel="noopener">去 README 拿群二维码</a>
+      </article>
+
+      <article class="card contact-card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5v5.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="16.3" r="1.2" fill="currentColor"/></svg>
+        </span>
+        <h3>GitHub Issues</h3>
+        <p>提 bug、报某个 App 读不到、提适配需求，走 Issues 最好跟踪。</p>
+        <a class="link-arrow" data-jev-issues href="#" target="_blank" rel="noopener">提一个 Issue</a>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CTA ===================== -->
+<section class="cta-band">
+  <div class="wrap cta-inner reveal">
+    <h2>现在装上，下一条消息就有副驾</h2>
+    <p>开源 MIT · Android 11+ · 当前版本 v<span data-jev-version>1.2</span></p>
+    <div class="hero-btns">
+      <a class="btn btn-primary" data-jev-apk href="#">下载 APK v<span data-jev-version>1.2</span></a>
+      <a class="btn btn-ghost" data-jev-repo href="#" target="_blank" rel="noopener">Star on GitHub</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <div class="foot-brand">
+      <a class="brand" href="#top">
+        <img src="assets/favicon.svg" alt="" width="28" height="28" class="brand-mark">
+        <span class="brand-name">Jev 聊天助手</span>
+      </a>
+      <p class="foot-tag">任何聊天里的对话副驾。读懂对方、三条回复、一键填入。</p>
+    </div>
+
+    <nav class="foot-col" aria-label="产品">
+      <h4>产品</h4>
+      <a data-jev-apk href="#">下载 APK v<span data-jev-version>1.2</span></a>
+      <a href="#start">快速开始</a>
+      <a href="#platforms">平台支持</a>
+    </nav>
+
+    <nav class="foot-col" aria-label="资源">
+      <h4>资源</h4>
+      <a data-jev-repo href="#" target="_blank" rel="noopener">GitHub</a>
+      <a data-jev-readme href="#" target="_blank" rel="noopener">README</a>
+      <a data-jev-commits href="#" target="_blank" rel="noopener">更新记录</a>
+      <a data-jev-issues href="#" target="_blank" rel="noopener">Issues</a>
+    </nav>
+
+    <nav class="foot-col" aria-label="社区">
+      <h4>社区</h4>
+      <a href="#contact">公众号</a>
+      <a data-jev-readme href="#" target="_blank" rel="noopener">交流群</a>
+    </nav>
+  </div>
+
+  <div class="wrap foot-bottom">
+    <p>© 2026 Jev Chat Assistant · MIT License</p>
+    <p class="disclaimer">仅供个人学习与研究使用，只处理你自己设备上、你自己有权查看的聊天，请遵守各软件许可协议与当地法律法规。</p>
+  </div>
+</footer>
+
+<script src="main.js"></script>
+</body>
+</html>
