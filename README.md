@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/images/logo.png" width="150" alt="Jev 聊天助手" />
+
 # Jev 聊天助手
 
 **装在手机上的「对话副驾」：你在任何聊天 App 里聊天，它在旁边读懂对方、告诉你该怎么回，一键填进输入框，发不发由你。**
