@@ -468,7 +468,7 @@ class KbStore private constructor(context: Context) {
         return out
     }
 
-    private fun key(side: String, text: String) = side + " " + text
+    private fun key(side: String, text: String) = side + "\u0000" + text
 
     companion object {
         private const val TAG = "JEVASSIST"

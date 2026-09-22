@@ -38,7 +38,9 @@ private fun looksLikeTimestamp(t: String): Boolean =
 /**
  * Conversation title in the top action bar: the topmost short, roughly centered
  * text above the first message bubble. Constrained so we never grab an in-chat
- * timestamp. Used by WeChat, and by QQ as a fallback when its title id is absent.
+ * timestamp. Used by QQ as a fallback when its title id is absent, by X, and by
+ * the bubble menu's manual OCR capture. WeChat has its own [findWeChatTitle]
+ * (group titles need extra filtering this generic version does not do).
  */
 internal fun findTitleInActionBar(
     root: AccessibilityNodeInfo,
@@ -71,13 +73,69 @@ internal fun findTitleInActionBar(
     return best
 }
 
+/** Chinese sentence punctuation — a real message/announcement line has it, a
+ *  title never does. */
+private val WECHAT_TITLE_EXCLUDE_PUNCT = Regex("""[，。？！、]""")
+
+/** A WeChat group title's "(N)" member-count suffix, half- or full-width. */
+private val WECHAT_GROUP_COUNT_SUFFIX = Regex("""[（(]\d+[）)]""")
+
+/**
+ * WeChat conversation title (v1.3 fix): a group's pinned announcement or a
+ * stray message can sit in the same "topmost, short, centered" search
+ * [findTitleInActionBar] does and get mistaken for the title (seen picking up
+ * `我有企微，但是用不习惯`, a chat line). A candidate must not read like a
+ * sentence (no Chinese punctuation) and must sit above the first bubble; among
+ * what is left, a group title's trailing "(N)" member count wins when present.
+ * Nothing qualifying → null (the caller's `lastGoodTitle` then carries the
+ * previous stable title forward instead of guessing).
+ */
+internal fun findWeChatTitle(
+    root: AccessibilityNodeInfo,
+    firstBubbleTop: Int,
+    width: Int,
+    res: Resources
+): String? {
+    val actionBarMax = minOf(firstBubbleTop, (res.displayMetrics.heightPixels * 0.14).toInt())
+    val minCenterX = (width * 0.25).toInt()
+    val maxCenterX = (width * 0.75).toInt()
+    val stack = ArrayDeque<AccessibilityNodeInfo>()
+    stack.addLast(root)
+    var bestPlain: String? = null
+    var bestPlainTop = Int.MAX_VALUE
+    var bestCounted: String? = null
+    var bestCountedTop = Int.MAX_VALUE
+    var guard = 0
+    while (stack.isNotEmpty() && guard < 5000) {
+        guard++
+        val node = stack.removeLast()
+        val text = node.text?.toString()
+        if (!text.isNullOrBlank() && text.length <= 24 && !looksLikeTimestamp(text) &&
+            !WECHAT_TITLE_EXCLUDE_PUNCT.containsMatchIn(text)
+        ) {
+            val b = Rect(); node.getBoundsInScreen(b)
+            if (b.bottom in 1 until actionBarMax && b.bottom < firstBubbleTop &&
+                b.centerX() in minCenterX..maxCenterX
+            ) {
+                if (WECHAT_GROUP_COUNT_SUFFIX.containsMatchIn(text)) {
+                    if (b.top < bestCountedTop) { bestCountedTop = b.top; bestCounted = text }
+                } else if (b.top < bestPlainTop) { bestPlainTop = b.top; bestPlain = text }
+            }
+        }
+        for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
+    }
+    return bestCounted ?: bestPlain
+}
+
 /** WeChat (com.tencent.mm). Message bubbles carry a stable id; sender side is
  *  the bubble's horizontal position (right = me, left = other).
  *
  *  "In a chat window" = a `id/bkl` bubble container exists (even with its text
- *  stripped by the obfuscation), or the window has an editable node (the chat
- *  input box). WeChat 8.0.52+ hides node text from ordinary services, so an
- *  empty read here is exactly the case OCR fallback exists for. */
+ *  stripped by the obfuscation) — nothing else counts, so a list screen's
+ *  editable search box can no longer pass for a chat window (v1.3 fix: it was
+ *  triggering OCR fallback on the conversation list). WeChat 8.0.52+ hides
+ *  node text from ordinary services, so an empty read here (a `bkl` with no
+ *  text) is exactly the case OCR fallback exists for. */
 class WeChatAdapter : ChatAppAdapter {
     override val pkg = "com.tencent.mm"
 
@@ -103,10 +161,9 @@ class WeChatAdapter : ChatAppAdapter {
                     if (b.top < firstBubbleTop) firstBubbleTop = b.top
                 }
             }
-            if (!isChat && node.isEditable) isChat = true
             for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
         }
-        val title = findTitleInActionBar(root, firstBubbleTop, width, res)
+        val title = findWeChatTitle(root, firstBubbleTop, width, res)
         // In a chat but nothing readable → empty snapshot, the OCR fallback cue.
         if (bubbles.isEmpty()) return if (isChat) ChatSnapshot(title, emptyList()) else null
         bubbles.sortBy { it.first }
@@ -388,6 +445,15 @@ class XAdapter : ChatAppAdapter {
         val rows = ArrayList<Row>()
         var firstRowTop = Int.MAX_VALUE
         var hasInput = false
+        // A full-width View whose desc has a separator ("：" / ": ") — the shape
+        // of a message row, whether or not parseXDesc could fully parse it.
+        var hasMessageRowShape = false
+        // A thread with zero messages still carries this placeholder text.
+        var hasDmLabel = false
+        // DM-list-only signals: the "compose new DM" affordance, or a "聊天/
+        // Messages" heading with nothing under it (parsed as an actual row).
+        var hasNewDmMarker = false
+        var sawListHeading = false
 
         val stack = ArrayDeque<AccessibilityNodeInfo>()
         stack.addLast(root)
@@ -399,9 +465,11 @@ class XAdapter : ChatAppAdapter {
             if (!hasInput && (node.isEditable || cls == "android.widget.EditText")) hasInput = true
 
             val desc = node.contentDescription?.toString()
+            if (desc == "新私信" || desc == "New message") hasNewDmMarker = true
             if (cls == "android.view.View" && !desc.isNullOrBlank() && !desc.contains(", @")) {
                 val b = Rect(); node.getBoundsInScreen(b)
                 if (b.left == 0 && b.right == width) {
+                    if (desc.contains('：') || desc.contains(": ")) hasMessageRowShape = true
                     val parsed = parseXDesc(desc)
                     if (parsed != null) {
                         rows.add(Row(b.top, parsed.first, parsed.second))
@@ -409,10 +477,24 @@ class XAdapter : ChatAppAdapter {
                     }
                 }
             }
+
+            if (cls == "android.widget.TextView") {
+                val text = node.text?.toString()?.trim()
+                if (text == "私信" || text == "Message" || text == "发送私信") hasDmLabel = true
+                if (text == "聊天" || text == "Messages") sawListHeading = true
+            }
             for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
         }
-        // No input box → this is the DM list (or some other X screen), not a chat.
-        if (!hasInput) return null
+        // Explicit "this is the DM list, not a thread" signals — checked before
+        // the generic rule below so they win even if a search box's EditText
+        // would otherwise have counted as "hasInput".
+        if (hasNewDmMarker || (sawListHeading && rows.isEmpty())) return null
+
+        // A chat window needs BOTH an input box AND something that only a
+        // thread has: an actual message-row shape, or the "私信" placeholder an
+        // empty thread shows. A list screen's search box has an EditText too,
+        // so hasInput alone used to misfire OCR fallback on the DM list.
+        if (!hasInput || !(hasMessageRowShape || hasDmLabel)) return null
 
         // X left-aligns the thread title (x≈300..443 of 1200), so widen the
         // shared helper's "roughly centered" band for this app.

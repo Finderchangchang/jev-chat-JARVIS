@@ -62,13 +62,15 @@ data class ChatContext(
      * "title: content". Blank when there is nothing to say — callers must then
      * omit the field entirely rather than send an empty one.
      *
-     * @param defaultRelationship used when the contact carries no relationship
-     *        of its own (and skipped entirely when the contact does).
+     * @param defaultRelationship unused when the contact carries no relationship
+     *        of its own — that global default already goes out separately as
+     *        `chat.relationship`, so repeating it here would just duplicate it.
+     *        A contact with no relationship set simply omits the "关系：" line.
      */
     fun background(defaultRelationship: String): String {
         val sb = StringBuilder()
         contact?.let { c ->
-            val rel = c.relationship.trim().ifBlank { defaultRelationship.trim() }
+            val rel = c.relationship.trim()
             if (rel.isNotEmpty()) sb.append("关系：").append(rel).append('\n')
             if (c.notes.isNotBlank()) sb.append("关于").append(c.name).append("：")
                 .append(c.notes.trim()).append('\n')

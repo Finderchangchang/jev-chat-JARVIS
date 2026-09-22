@@ -56,6 +56,13 @@ open class ChatCaptureService : AccessibilityService() {
     private var lastSignature: String = ""
     private var activePkg: String? = null
     private var analyzing = false
+
+    /** Last known-good (non-transient) title per package. See [isTransientTitle]:
+     *  a page like X's DM thread briefly shows "连接中…" as `snapshot.title`
+     *  right after opening, which must never overwrite a real conversation
+     *  title or get saved as a contact name. Never cleared on app switch — the
+     *  next real title for that package simply replaces it. */
+    private val lastGoodTitle: MutableMap<String, String> = HashMap()
     private val debounce = Runnable { runAnalysis() }
     private var pendingSnapshot: ChatSnapshot? = null
     @Volatile private var currentSnapshot: ChatSnapshot? = null
@@ -87,12 +94,15 @@ open class ChatCaptureService : AccessibilityService() {
         overlay?.onSaveContact = {
             val title = currentSnapshot?.title
             val pkg = activePkg ?: foregroundPkg ?: ""
-            if (title.isNullOrBlank()) overlay?.toast("当前会话没有标题，存不了")
-            else submit {
-                val msg = try {
-                    KbStore.get(this).saveOrMergeContact(title, pkg)
-                } catch (e: Exception) { "保存失败：${e.javaClass.simpleName}" }
-                main.post { overlay?.toast(msg) }
+            when {
+                title.isNullOrBlank() -> overlay?.toast("当前会话没有标题，存不了")
+                isTransientTitle(title) -> overlay?.toast("当前会话标题还没加载出来，稍后再试")
+                else -> submit {
+                    val msg = try {
+                        KbStore.get(this).saveOrMergeContact(title, pkg)
+                    } catch (e: Exception) { "保存失败：${e.javaClass.simpleName}" }
+                    main.post { overlay?.toast(msg) }
+                }
             }
         }
         // Bubble menu: one manual screenshot + OCR, for any app at all.
@@ -153,7 +163,10 @@ open class ChatCaptureService : AccessibilityService() {
         // the only way in for them is the bubble menu's "截屏识别一次".
         val adapter = adapters[pkg] ?: return
         // Only act inside a chat window (the adapter returns null elsewhere).
-        val snapshot = adapter.extract(root, resources) ?: return
+        val rawSnapshot = adapter.extract(root, resources) ?: return
+        // Stabilize the title BEFORE anything below reads it: some apps (X) show
+        // a transient "连接中…" title for a moment right after opening a thread.
+        val snapshot = stabilizeTitle(pkg ?: "", rawSnapshot)
         if (!prefs.isAllowed(snapshot.title)) { main.post { overlay?.hide() }; return }
         // In a chat window but the tree holds no text (Feishu draws its bodies,
         // WeChat hides them when the disguise fails) → screenshot + OCR, subject
@@ -187,6 +200,10 @@ open class ChatCaptureService : AccessibilityService() {
         // Same content but the bubble is gone (killed by MIUI, or we left and came
         // back) → just put the bubble back, do NOT re-analyze (saves tokens/time).
         if (sig == lastSignature && !showing) { main.post { overlay?.showIdle(snapshot.title) }; return }
+        // Anything else reaching here is a genuinely different conversation (new
+        // app, or new content in this one) — a leftover judgment/candidates from
+        // whatever was shown before must not leak into it.
+        main.post { overlay?.resetForNewConversation() }
         lastSignature = sig
         Log.d(TAG, "snapshot[$pkg] title=${snapshot.title} n=${snapshot.messages.size} " +
             snapshot.messages.takeLast(6).joinToString(" | ") { "${it.side}:${it.text.length}" }) // sides + lengths only, never content
@@ -200,6 +217,27 @@ open class ChatCaptureService : AccessibilityService() {
         pendingSnapshot = snapshot
         main.removeCallbacks(debounce)
         main.postDelayed(debounce, 800) // debounce bursts of content-changed events
+    }
+
+    /** A placeholder title an app shows only for a moment (e.g. X's "连接中…"
+     *  right after opening a DM thread) — never a real conversation title.
+     *  Blank/null counts too, so a caller can always fall back the same way. */
+    private fun isTransientTitle(t: String?): Boolean {
+        val trimmed = t?.trim()?.removeSuffix("…")?.removeSuffix("...")?.trim()
+        if (trimmed.isNullOrEmpty()) return true
+        val lower = trimmed.lowercase()
+        return TRANSIENT_TITLE_WORDS.any { lower.contains(it.lowercase()) }
+    }
+
+    /** Replace a transient title with the last known-good one for this package
+     *  (if any), and otherwise remember the current title as the new good one. */
+    private fun stabilizeTitle(pkg: String, snapshot: ChatSnapshot): ChatSnapshot {
+        if (isTransientTitle(snapshot.title)) {
+            val good = lastGoodTitle[pkg] ?: return snapshot
+            return snapshot.copy(title = good)
+        }
+        snapshot.title?.let { lastGoodTitle[pkg] = it }
+        return snapshot
     }
 
     private fun runAnalysis() {
@@ -232,10 +270,14 @@ open class ChatCaptureService : AccessibilityService() {
             }
             // Candidate replies are slower (generative + rank) — fill in when ready.
             submit {
-                val ranked = try { client.draftAndRank(snapshot, rel, ctx) } catch (e: Exception) { emptyList() }
+                var replyError: String? = null
+                val ranked = try { client.draftAndRank(snapshot, rel, ctx) } catch (e: Exception) {
+                    replyError = e.message ?: e.javaClass.simpleName
+                    emptyList()
+                }
                 main.post {
                     analyzing = false
-                    overlay?.showReplies(ranked) { text -> fillInput(text) }
+                    overlay?.showReplies(ranked, replyError) { text -> fillInput(text) }
                 }
             }
         }
@@ -413,6 +455,9 @@ open class ChatCaptureService : AccessibilityService() {
             if (overlay?.isShowing() != true) overlay?.showIdle(snapshot.title)
             return
         }
+        // Same rule as the tree path: past this point the conversation is either
+        // new or being force-refreshed, so drop whatever was shown before.
+        overlay?.resetForNewConversation()
         lastSignature = sig
 
         val auto = prefs.ocrAutoAnalyze && prefs.autoAnalyze && snapshot.latestFrom == "other"
@@ -534,5 +579,13 @@ open class ChatCaptureService : AccessibilityService() {
 
         private val PURE_TIME = Regex("""\d{1,2}[:：]\d{2}""")
         private val TAIL_TIME = Regex("""\d{1,2}[:：]\d{2}$""")
+
+        /** Transient placeholder titles apps show while a chat page is still
+         *  connecting/loading — see [isTransientTitle]. Matched as a substring,
+         *  case-insensitive, after trimming a trailing ellipsis. */
+        private val TRANSIENT_TITLE_WORDS = listOf(
+            "连接中", "正在连接", "未连接", "Connecting",
+            "加载中", "Loading", "同步中", "Syncing"
+        )
     }
 }

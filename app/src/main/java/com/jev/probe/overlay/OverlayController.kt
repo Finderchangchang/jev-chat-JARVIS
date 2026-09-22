@@ -68,6 +68,10 @@ class OverlayController(private val ctx: Context) {
     private var lastJudgment: Analysis? = null
     private var lastFill: ((String) -> Unit)? = null
 
+    /** Set when [showReplies] was handed a draftAndRank failure, so the panel
+     *  can say so instead of silently showing "（未生成候选回复）". */
+    private var replyError: String? = null
+
     private fun dp(v: Int) = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), ctx.resources.displayMetrics).roundToInt()
 
@@ -283,7 +287,30 @@ class OverlayController(private val ctx: Context) {
 
     fun showIdle(title: String?) {
         ensureRoot(); bubble?.alpha = 0.55f
-        if (lastJudgment == null) setContent(listOf(bigButton("分析当前对话") { onManualAnalyze?.invoke() }))
+        // Either there is genuinely nothing to show yet, or the panel is empty
+        // for some other reason (root got rebuilt after hide(), leaving
+        // contentBox with zero children while lastJudgment still points at a
+        // stale conversation) — either way an empty panel must never stay
+        // literally blank.
+        if (lastJudgment == null || contentBox?.childCount == 0) {
+            setContent(listOf(bigButton("分析当前对话") { onManualAnalyze?.invoke() }))
+        }
+    }
+
+    /**
+     * Drop whatever judgment/candidates/note belonged to the previous
+     * conversation. Call this before showing anything for a different chat
+     * window (a different app, or new content in the same one) — otherwise a
+     * leftover [lastJudgment] from a prior conversation can keep [showIdle]
+     * from putting the "分析当前对话" button back, and a leftover [lastFill]
+     * could fill the wrong chat's input box.
+     */
+    fun resetForNewConversation() {
+        lastJudgment = null
+        lastFill = null
+        noteText = null
+        replyError = null
+        contentBox?.removeAllViews()
     }
 
     private fun bigButton(label: String, onClick: () -> Unit) = TextView(ctx).apply {
@@ -299,6 +326,7 @@ class OverlayController(private val ctx: Context) {
     fun showLoading() {
         ensureRoot(); bubble?.alpha = 1f
         ctxNotes = 0; ctxHistory = 0   // counts for the round that is starting
+        replyError = null              // this round has not failed (yet)
         setContent(listOf(hint("分析中…")))
         if (!expanded) toggle()
     }
@@ -333,8 +361,9 @@ class OverlayController(private val ctx: Context) {
         render(a, generating = true)
     }
 
-    fun showReplies(ranked: List<RankedReply>, onFill: (String) -> Unit) {
+    fun showReplies(ranked: List<RankedReply>, error: String? = null, onFill: (String) -> Unit) {
         lastFill = onFill
+        replyError = error
         val a = lastJudgment?.copy(rankedReplies = ranked) ?: return
         lastJudgment = a
         render(a, generating = false)
@@ -396,7 +425,10 @@ class OverlayController(private val ctx: Context) {
             a.rankedReplies.forEachIndexed { i, r ->
                 views.add(replyCard(i + 1, r.text, (r.prob * 100).roundToInt(), fill))
             }
-            if (a.rankedReplies.isEmpty()) views.add(hint("（未生成候选回复）"))
+            if (a.rankedReplies.isEmpty()) {
+                val msg = replyError?.let { "回复接口出错：$it" } ?: "（未生成候选回复）"
+                views.add(hint(msg))
+            }
         }
         views.add(reAnalyzeBtn())
 
