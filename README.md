@@ -32,18 +32,18 @@
 | 微信 Android | ✅ 全链路 | 伪装系统无障碍服务读气泡节点 | 8.0.52+ 混淆节点，伪装后 8.0.78 实测可读 |
 | QQ Android | ✅ 全链路 | 无障碍读节点 | 9.3.50 实测（群聊）；1v1 按同结构推断 |
 | X / Twitter 私信 | ✅ 全链路 | 解析 Compose 节点的 content-desc | 12.25 实测，中文界面；英文界面未验 |
-| 飞书 / Lark | 🟡 OCR 兜底（真机验证中） | 无障碍读气泡矩形 + ML Kit 离线 OCR 识别正文 | 正文自绘不在无障碍树里，1.3 起对每个气泡矩形做 OCR；我/对方按已读状态判 |
-| 任意其它 App | 🟡 手动 | 悬浮窗菜单「截屏识别一次」整屏 OCR | 不自动、不分我/对方（全部当作对方所说并在面板标注） |
+| 飞书 / Lark | ✅ OCR 兜底（真机验证） | 无障碍读气泡矩形 + ML Kit 离线 OCR 识别正文 | 正文自绘不在无障碍树里，1.3 起对每个气泡矩形做 OCR；我/对方按已读状态判 |
+| 任意其它 App | ✅ 手动 | 悬浮窗菜单「截屏识别一次」整屏 OCR | 不自动、不分我/对方（全部当作对方所说并在面板标注） |
 | 桌面端 / 网页 | ⏳ 规划 | 截图 + OCR / 视觉 | 同一内核，换采集方式 |
 
 本项目只读你自己设备上、你自己有权查看的聊天，不针对任何单一平台。
 
 ## 快速开始
 
-**1. 装包。** 仓库里有签好名的 release 包：[`apk/jev-assistant-v1.2-release.apk`](apk/jev-assistant-v1.2-release.apk)（Android 11+）。
+**1. 装包。** 仓库里有签好名的 release 包：[`apk/jev-assistant-v1.3-release.apk`](apk/jev-assistant-v1.3-release.apk)（Android 11+）。
 
 ```bash
-adb install -r apk/jev-assistant-v1.2-release.apk
+adb install -r apk/jev-assistant-v1.3-release.apk
 ```
 
 **2. 填密钥。** 打开 App → 设置 →「接口」现在分三张卡：判断接口 / 回复接口 / 视觉接口。最简单只填「判断接口」一栏的 [OpenRouter](https://openrouter.ai/) API Key，其余两栏留空会自动继承这把密钥就能用。想换回复模型（默认 `deepseek/deepseek-chat-v3.1`，国内 Gemini / OpenAI 会被区域限制）就在「回复接口」选预设（OpenRouter / DeepSeek 官方 / 通义兼容）或自填地址，每张卡都有独立的一键连通测试。
