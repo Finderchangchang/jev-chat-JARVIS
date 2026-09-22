@@ -4,16 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jev 聊天助手 — 任何聊天里的对话副驾</title>
-<meta name="description" content="Jev 聊天助手是一个开源 Android 对话副驾：读懂对方刚发的消息，给出意图与危险等级判断，起草三条候选回复，一键填进输入框。程序只填不发，发不发由你。微信 / QQ / X 已跑通。">
+<meta name="description" content="Jev 聊天助手是一个开源 Android / Windows / macOS 三端对话副驾：读懂对方刚发的消息，给出意图与危险等级判断，起草三条候选回复，一键填进输入框。程序只填不发，发不发由你。微信 / QQ / X 已跑通。">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Jev 聊天助手 — 任何聊天里的对话副驾">
-<meta property="og:description" content="读懂对方、三条回复、一键填入。开源 MIT，Android 11+。程序只填不发。">
+<meta property="og:description" content="读懂对方、三条回复、一键填入。开源 MIT，Android / Windows / macOS 三端。程序只填不发。">
 <meta property="og:image" content="assets/og.png">
 <meta property="og:site_name" content="Jev 聊天助手">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Jev 聊天助手 — 任何聊天里的对话副驾">
-<meta name="twitter:description" content="读懂对方、三条回复、一键填入。开源 MIT，Android 11+。">
+<meta name="twitter:description" content="读懂对方、三条回复、一键填入。开源 MIT，Android / Windows / macOS 三端。">
 <meta name="twitter:image" content="assets/og.png">
 <script>
   window.JEV = {
@@ -76,7 +76,7 @@
 <section class="hero" id="top">
   <div class="wrap hero-grid">
     <div class="hero-copy">
-      <span class="eyebrow reveal">开源 · MIT · Android 11+</span>
+      <span class="eyebrow reveal">开源 · MIT · Android / Windows / macOS</span>
       <h1 class="hero-title reveal">任何聊天里，<br>都有个副驾</h1>
       <p class="hero-sub reveal">读懂对方、三条回复、一键填入。微信 / QQ / X 已跑通，飞书接入中。</p>
 
@@ -90,6 +90,8 @@
 
       <div class="hero-btns reveal">
         <a class="btn btn-primary" data-jev-apk href="#">下载 APK v<span data-jev-version>1.2</span></a>
+        <a class="btn btn-ghost" href="https://github.com/jev-chat/jev-chat-windows/releases" target="_blank" rel="noopener">Windows 版 v0.1.6</a>
+        <a class="btn btn-ghost" href="https://github.com/jev-chat/jev-chat-jarvis-mac/releases" target="_blank" rel="noopener">macOS 版 v0.3.0</a>
         <a class="btn btn-ghost" data-jev-repo href="#" target="_blank" rel="noopener">Star on GitHub</a>
       </div>
 
@@ -320,8 +322,52 @@
           <tr><th scope="row">飞书 / Lark</th><td><span class="dot wip"></span>OCR 兜底</td><td>真机验证中</td></tr>
           <tr><th scope="row">任意其它 App</th><td><span class="dot wip"></span>手动识别</td><td>悬浮窗菜单「截屏识别一次」</td></tr>
           <tr><th scope="row">桌面端 / 网页</th><td><span class="dot plan"></span>规划中</td><td>—</td></tr>
+          <tr><th scope="row">微信 Windows 4.x</th><td><span class="dot ok"></span>全链路</td><td>v0.1.6 · 窗口截图 + 离线 OCR</td></tr>
+          <tr><th scope="row">微信 macOS</th><td><span class="dot ok"></span>全链路</td><td>v0.3.0 · 看屏 + 本地模型</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== DESKTOP ===================== -->
+<section class="sec" id="desktop">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="reveal">三个端，一套判断内核</h2>
+      <p class="sec-lead reveal">判断、候选、排序用同一套内核，采集方式按平台各自适配，规则保持一致：只读屏幕、只填不发。</p>
+    </div>
+
+    <div class="grid grid-3">
+      <article class="card contact-card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10 19h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </span>
+        <h3>Android · v1.3</h3>
+        <p>无障碍服务读屏幕上的对话，读不到就离线 OCR 兜底。微信 / QQ / X 已跑通。</p>
+        <a class="link-arrow" data-jev-apk href="#">下载</a>
+        <a class="link-arrow" data-jev-repo href="#" target="_blank" rel="noopener">源码</a>
+      </article>
+
+      <article class="card contact-card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 20h7M12 16.5V20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </span>
+        <h3>Windows · v0.1.6</h3>
+        <p>截自己的微信窗口 + 本地离线 OCR，不 hook、不读数据库，适配微信 Windows 4.x。</p>
+        <a class="link-arrow" href="https://github.com/jev-chat/jev-chat-windows/releases" target="_blank" rel="noopener">下载</a>
+        <a class="link-arrow" href="https://github.com/jev-chat/jev-chat-windows" target="_blank" rel="noopener">源码</a>
+      </article>
+
+      <article class="card contact-card reveal">
+        <span class="card-ico">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 5.5A1.5 1.5 0 0 1 6.5 4h11A1.5 1.5 0 0 1 19 5.5V15H5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M2.5 15h19l-1.4 3.1a1.7 1.7 0 0 1-1.55 1H5.45a1.7 1.7 0 0 1-1.55-1z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        </span>
+        <h3>macOS · v0.3.0</h3>
+        <p>看屏 + 本地小模型判断意图与风险等级，按话术生成候选并本地排序，适配微信 macOS。</p>
+        <a class="link-arrow" href="https://github.com/jev-chat/jev-chat-jarvis-mac/releases" target="_blank" rel="noopener">下载</a>
+        <a class="link-arrow" href="https://github.com/jev-chat/jev-chat-jarvis-mac" target="_blank" rel="noopener">源码</a>
+      </article>
     </div>
   </div>
 </section>
@@ -331,7 +377,7 @@
   <div class="wrap">
     <div class="sec-head">
       <h2 class="reveal">三步开始</h2>
-      <p class="sec-lead reveal">装包、填一把密钥、开三个权限。Android 11 及以上。</p>
+      <p class="sec-lead reveal">Android 装 APK；Windows / macOS 去各自发布页下载。</p>
     </div>
 
     <div class="grid grid-3 steps">
@@ -343,6 +389,7 @@
           <code>adb install -r jev-assistant-v<span data-jev-version>1.2</span>-release.apk</code>
         </div>
         <a class="btn btn-primary btn-sm" data-jev-apk href="#">下载 APK v<span data-jev-version>1.2</span></a>
+        <p class="hero-note step-note">桌面端：<a href="https://github.com/jev-chat/jev-chat-windows/releases" target="_blank" rel="noopener">Windows v0.1.6</a> · <a href="https://github.com/jev-chat/jev-chat-jarvis-mac/releases" target="_blank" rel="noopener">macOS v0.3.0</a></p>
       </article>
 
       <article class="card step reveal">
@@ -432,11 +479,11 @@
       </details>
       <details>
         <summary>支持 iOS 吗？<span class="acc-ico" aria-hidden="true"></span></summary>
-        <div class="faq-body"><p>暂不支持。当前只有 Android App，需要 Android 11 及以上，因为实现依赖系统的无障碍服务。</p></div>
+        <div class="faq-body"><p>暂不支持 iOS。桌面端已经有独立版本：<a href="https://github.com/jev-chat/jev-chat-windows" target="_blank" rel="noopener">Windows</a>（v0.1.6）、<a href="https://github.com/jev-chat/jev-chat-jarvis-mac" target="_blank" rel="noopener">macOS</a>（v0.3.0），加上 Android（v1.3），各自独立仓库维护。</p></div>
       </details>
       <details>
-        <summary>电脑端 / 网页能用吗？<span class="acc-ico" aria-hidden="true"></span></summary>
-        <div class="faq-body"><p>规划中，还没有可用版本。定位是「全平台对话副驾」，Android 是第一站。</p></div>
+        <summary>电脑端能用吗？<span class="acc-ico" aria-hidden="true"></span></summary>
+        <div class="faq-body"><p>能用。<a href="https://github.com/jev-chat/jev-chat-windows" target="_blank" rel="noopener">Windows 版</a>（v0.1.6）适配微信 Windows 4.x，截自己的窗口 + 本地离线 OCR；<a href="https://github.com/jev-chat/jev-chat-jarvis-mac" target="_blank" rel="noopener">macOS 版</a>（v0.3.0）适配微信 macOS，看屏 + 本地小模型判断。网页版暂无规划。</p></div>
       </details>
       <details>
         <summary>要准备什么密钥？<span class="acc-ico" aria-hidden="true"></span></summary>
@@ -500,9 +547,11 @@
 <section class="cta-band">
   <div class="wrap cta-inner reveal">
     <h2>现在装上，下一条消息就有副驾</h2>
-    <p>开源 MIT · Android 11+ · 当前版本 v<span data-jev-version>1.2</span></p>
+    <p>开源 MIT · Android v<span data-jev-version>1.2</span> · Windows v0.1.6 · macOS v0.3.0</p>
     <div class="hero-btns">
       <a class="btn btn-primary" data-jev-apk href="#">下载 APK v<span data-jev-version>1.2</span></a>
+      <a class="btn btn-ghost" href="https://github.com/jev-chat/jev-chat-windows/releases" target="_blank" rel="noopener">Windows 版 v0.1.6</a>
+      <a class="btn btn-ghost" href="https://github.com/jev-chat/jev-chat-jarvis-mac/releases" target="_blank" rel="noopener">macOS 版 v0.3.0</a>
       <a class="btn btn-ghost" data-jev-repo href="#" target="_blank" rel="noopener">Star on GitHub</a>
     </div>
   </div>
@@ -523,6 +572,8 @@
     <nav class="foot-col" aria-label="产品">
       <h4>产品</h4>
       <a data-jev-apk href="#">下载 APK v<span data-jev-version>1.2</span></a>
+      <a href="https://github.com/jev-chat/jev-chat-windows/releases" target="_blank" rel="noopener">Windows 版</a>
+      <a href="https://github.com/jev-chat/jev-chat-jarvis-mac/releases" target="_blank" rel="noopener">macOS 版</a>
       <a href="#start">快速开始</a>
       <a href="#platforms">平台支持</a>
     </nav>
