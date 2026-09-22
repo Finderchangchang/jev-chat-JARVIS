@@ -9,6 +9,7 @@ import com.jev.probe.core.RankedReply
 import com.jev.probe.core.Score
 import com.jev.probe.core.kb.ChatContext
 import org.json.JSONObject
+import org.json.JSONArray
 
 /**
  * The Jev judgment route only: the 7 judgment questions in one call, and the
@@ -90,6 +91,7 @@ class JudgeClient(private val prefs: Prefs) {
     }
 
     private fun send(state: JSONObject, questions: JSONObject): JSONObject {
+        if (prefs.judgeProvider == Prefs.PROVIDER_CUSTOM) return sendCustomChat(state, questions)
         val url = prefs.judgeEndpoint()
         val body = JSONObject()
             .put("model", prefs.judgeModel)
@@ -97,6 +99,23 @@ class JudgeClient(private val prefs: Prefs) {
             .put("questions", questions)
         val resp = HttpJson.post(url, prefs.judgeKey, body, Route.JUDGE, HttpJson.headersFor(url))
         return resp.optJSONObject("answers") ?: JSONObject()
+    }
+
+    private fun sendCustomChat(state: JSONObject, questions: JSONObject): JSONObject {
+        val system = "你是聊天关系分析助手。只返回合法 JSON，不要 Markdown。根据 QUESTIONS 的 criteria 分析 STATE。" +
+            "choice 返回 {choice,confidence,probabilities}；score 返回 {score,confidence,legend}；" +
+            "noul 返回 {noul:0.0 或 1.0}。必须返回 literal_question、true_intent、danger_level、" +
+            "should_reply_now、best_action、she_needs、tension_resolved 以及需要时的 best_reply。"
+        val messages = JSONArray()
+            .put(JSONObject().put("role", "system").put("content", system))
+            .put(JSONObject().put("role", "user").put("content", "STATE:\n$state\n\nQUESTIONS:\n$questions"))
+        val body = JSONObject().put("model", prefs.judgeModel).put("messages", messages).put("temperature", 0.1)
+        val url = prefs.judgeChatEndpoint()
+        val resp = HttpJson.post(url, prefs.judgeKey, body, Route.JUDGE, HttpJson.headersFor(url))
+        val content = resp.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content").orEmpty()
+        val start = content.indexOf('{'); val end = content.lastIndexOf('}')
+        if (start < 0 || end <= start) throw ApiException(Route.JUDGE, null, "模型未返回 JSON")
+        return JSONObject(content.substring(start, end + 1)).let { if (it.has("answers")) it.optJSONObject("answers") ?: JSONObject() else it }
     }
 
     private fun parseChoice(o: JSONObject?): Choice? {

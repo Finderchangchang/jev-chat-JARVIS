@@ -105,6 +105,23 @@ object HttpJson {
         throw last ?: ApiException(route, null, "请求失败")
     }
 
+    /** Fetch a JSON document such as an OpenAI-compatible /v1/models response. */
+    fun get(url: String, key: String, route: String): JSONObject {
+        var conn: HttpURLConnection? = null
+        try {
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"; connectTimeout = 15000; readTimeout = 25000
+                setRequestProperty("Authorization", "Bearer $key")
+                setRequestProperty("Accept", "application/json")
+            }
+            val code = conn.responseCode
+            if (code !in 200..299) throw ApiException(route, code, readBody(conn.errorStream))
+            return JSONObject(readBody(conn.inputStream))
+        } catch (e: ApiException) { throw e
+        } catch (e: Exception) { throw ApiException(route, null, e.message ?: e.javaClass.simpleName)
+        } finally { conn?.disconnect() }
+    }
+
     /** Body text, or "" — a null stream or a read failure never costs us the status code. */
     private fun readBody(stream: java.io.InputStream?): String {
         stream ?: return ""

@@ -52,6 +52,19 @@ class ReplyClient(private val prefs: Prefs) {
         return sb.toString()
     }
 
+    /** Fetch model IDs from the configured OpenAI-compatible /v1/models endpoint. */
+    fun listModels(): List<String> {
+        val base = prefs.replyBaseUrl.trim().trimEnd('/')
+        val url = if (base.endsWith("/v1", ignoreCase = true)) "$base/models" else "$base/v1/models"
+        val data = HttpJson.get(url, prefs.effectiveReplyKey(), Route.REPLY).optJSONArray("data") ?: return emptyList()
+        val out = ArrayList<String>()
+        for (i in 0 until data.length()) {
+            val id = data.optJSONObject(i)?.optString("id")?.trim().orEmpty()
+            if (id.isNotEmpty()) out.add(id)
+        }
+        return out.distinct().sorted()
+    }
+
     /**
      * One plain chat round trip for the settings connectivity test. Deliberately
      * NOT [summarize]: the test should exercise the ordinary path, not whatever

@@ -18,6 +18,8 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
+import android.widget.Spinner
+import android.widget.ArrayAdapter
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -174,7 +176,37 @@ class SettingsActivity : AppCompatActivity() {
         replyCard.addView(edit(prefs.replyKey, "留空则用判断接口密钥", password = true).also { replyKeyEdit = it })
         replyCard.addView(label("模型"))
         replyCard.addView(replyModelEdit)
+        val modelSpinner = Spinner(this)
+        val modelAdapter = ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, mutableListOf("点击“拉取模型列表”"))
+        modelSpinner.adapter = modelAdapter
+        modelSpinner.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                modelAdapter.getItem(position)?.takeIf { !it.startsWith("点击") }?.let(replyModelEdit::setText)
+            }
+        })
+        replyCard.addView(modelSpinner)
         val replyResult = resultText()
+        replyCard.addView(cardBtn("拉取模型列表") {
+            val key = replyKeyEdit.text.toString().trim().ifBlank { judgeKeyEdit.text.toString().trim() }
+            if (key.isBlank()) { replyResult.text = "请先填密钥"; return@cardBtn }
+            replyResult.text = "拉取模型列表中…"
+            worker.execute {
+                try {
+                    val probe = draftPrefs(SCRATCH_REPLY) {
+                        judgeKey = key; replyKey = key
+                        replyBaseUrl = replyBaseEdit.text.toString().trim().ifBlank { Prefs.DEFAULT_REPLY_BASE }
+                        replyModel = replyModelEdit.text.toString().trim().ifBlank { Prefs.DEFAULT_REPLY_MODEL }
+                    }
+                    val models = ReplyClient(probe).listModels()
+                    main.post {
+                        modelAdapter.clear()
+                        if (models.isEmpty()) { modelAdapter.add("未返回模型，请检查地址和权限"); replyResult.text = "未找到模型" }
+                        else { modelAdapter.addAll(models); modelAdapter.notifyDataSetChanged(); replyResult.text = "已拉取 ${models.size} 个模型" }
+                    }
+                } catch (e: Exception) { main.post { replyResult.text = "拉取失败：${e.message ?: e.javaClass.simpleName}" } }
+            }
+        })
         replyCard.addView(cardBtn("测试回复") {
             val base = replyBaseEdit.text.toString().trim()
             val model = replyModelEdit.text.toString().trim()

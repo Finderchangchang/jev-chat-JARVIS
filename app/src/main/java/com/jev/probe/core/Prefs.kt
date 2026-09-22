@@ -203,8 +203,19 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         }
     }
 
+    /** OpenAI-compatible judge endpoint for custom providers. */
+    fun judgeChatEndpoint(): String {
+        val base = judgeBaseUrl.trim().trimEnd('/')
+        return if (base.endsWith("/v1", ignoreCase = true)) "$base/chat/completions"
+        else "$base/v1/chat/completions"
+    }
+
     /** Full POST URL for the OpenAI-compatible chat completions call. */
-    fun replyEndpoint(): String = "${replyBaseUrl.trim().trimEnd('/')}/chat/completions"
+    fun replyEndpoint(): String {
+        val base = replyBaseUrl.trim().trimEnd('/')
+        return if (base.endsWith("/v1", ignoreCase = true)) "$base/chat/completions"
+        else "$base/v1/chat/completions"
+    }
 
     /** Same shape as [replyEndpoint]; blank falls back to the OpenRouter default. */
     fun visionEndpoint(): String {
