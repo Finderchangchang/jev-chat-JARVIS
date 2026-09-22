@@ -23,7 +23,7 @@
 
 <table>
 <tr>
-<td width="180"><a href="https://faka.rainlanguage.top"><b>小优店铺</b></a></td>
+<td width="180"><a href="https://faka.rainlanguage.top"><img src="docs/images/sponsors/xiaoyou.png" alt="小优店铺" width="150"></a></td>
 <td>感谢 <b>小优店铺</b> 赞助了本项目！小优店铺是一家数字商品与账号服务店铺，为本项目的用户提供选购渠道。<a href="https://faka.rainlanguage.top">点此前往</a>。</td>
 </tr>
 </table>
