@@ -271,17 +271,6 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
 
 <p align="center"><sub>群二维码 7 天有效（本批到 2026-09-29），过期了公众号私信要新码。</sub></p>
 
-## ☕ 请我喝杯咖啡
-
-如果你觉得我写的这玩意儿对你有点帮助，欢迎请我喝杯咖啡。咖啡因一到位，脑子就开始冒泡，源源不断地驱动我往前跑；哪天我更新得特别勤，说明这杯续上了 😄
-
-<p align="center">
-  <img src="docs/images/donate/wechat-donate.png" width="280" alt="微信赞赏码（姓名已隐去）" />
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/images/donate/alipay-donate.jpg" width="280" alt="支付宝赞赏码（姓名已隐去）" />
-</p>
-
-<p align="center"><sub>随手支持，不用有压力；不支持也没关系，点个 Star 或提条建议同样能让我开心很久。</sub></p>
 ## 姊妹项目
 
 同在 [jev-chat](https://github.com/jev-chat) 组织下：
@@ -299,3 +288,15 @@ Copyright © 2026 Finderchangchang 与 jev-chat 贡献者。代码以 [MIT](LICE
 - 不要用「Jev 聊天助手」「jev-chat」名称或 chatjevs.com 域名暗示由原作者出品或背书。
 
 **免责声明**：本项目只处理你自己设备上、你自己有权查看的聊天。请遵守微信、QQ、X、飞书等各软件的许可协议与当地法律法规，作者不对使用后果负责。
+
+## ☕ 请我喝杯咖啡
+
+如果你觉得我写的这玩意儿对你有点帮助，欢迎请我喝杯咖啡。咖啡因一到位，脑子就开始冒泡，源源不断地驱动我往前跑；哪天我更新得特别勤，说明这杯续上了 😄
+
+<p align="center">
+  <img src="docs/images/donate/wechat-donate.png" width="180" alt="微信赞赏码（姓名已隐去）" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/images/donate/alipay-donate.jpg" width="180" alt="支付宝赞赏码（姓名已隐去）" />
+</p>
+
+<p align="center"><sub>随手支持，不用有压力；不支持也没关系，点个 Star 或提条建议同样能让我开心很久。</sub></p>
