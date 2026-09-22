@@ -14,19 +14,17 @@
 
 </div>
 
-## ❤️ 赞助商
+## ❤️赞助商
+
+> [想出现在这里？](#交流群--需求收集)
 
 <details open>
-<summary><b>点击折叠</b></summary>
+<summary>点击折叠</summary>
 
 <table>
 <tr>
-<td width="180" align="center"><b>小优店铺</b></td>
-<td>感谢 <b>小优店铺</b> 赞助了本项目！小优店铺是一家数字商品与账号服务店铺，为本项目的用户提供选购渠道。前往 <a href="https://faka.rainlanguage.top">faka.rainlanguage.top</a> 了解。</td>
-</tr>
-<tr>
-<td width="180" align="center"><b>想出现在这里？</b></td>
-<td>项目免费开源，服务器、真机测试和模型调用都是自费。长期赞助可以在 README 顶部这个位置展示品牌 logo、一句话介绍和链接。请公众号私信联系，二维码见<a href="#交流群--需求收集">文末</a>。</td>
+<td width="180"><a href="https://faka.rainlanguage.top"><b>小优店铺</b></a></td>
+<td>感谢 <b>小优店铺</b> 赞助了本项目！小优店铺是一家数字商品与账号服务店铺，为本项目的用户提供选购渠道。<a href="https://faka.rainlanguage.top">点此前往</a>。</td>
 </tr>
 </table>
 
@@ -250,8 +248,8 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
 想听真实需求：你在哪个聊天 App 上最想要这个副驾？希望它判断什么、怎么提示、什么绝对不能碰？扫码进群直接说。**1 至 6 群已满，不要再扫；7、8 群任选一个，请勿重复加入。**
 
 <table align="center"><tr>
-  <td align="center"><img src="docs/images/wechat-group-7.png" width="170" alt="7 群" /><br/><b>7 群</b></td>
-  <td align="center"><img src="docs/images/wechat-group-8.png" width="170" alt="8 群" /><br/><b>8 群</b></td>
+  <td align="center"><img src="docs/images/wechat-group-7.png" width="180" alt="7 群" /><br/><b>7 群</b></td>
+  <td align="center"><img src="docs/images/wechat-group-8.png" width="180" alt="8 群" /><br/><b>8 群</b></td>
 </tr></table>
 
 <p align="center"><sub>以下六群已满，请勿再扫：</sub></p>
