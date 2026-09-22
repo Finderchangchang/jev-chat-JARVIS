@@ -133,6 +133,12 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
 
 <p align="center"><sub>群二维码 7 天有效（本批到 2026-09-28），过期了公众号私信要新码。</sub></p>
 
+## 姊妹项目
+
+这个项目和几个朋友的 AI 工具放在同一个组织 [jev-chat](https://github.com/jev-chat) 下面：
+
+- [微墨 WeChat Ink](https://github.com/Snowwit88/wechat-ink)：微信公众号写作、配图与排版助手，支持资料核验、学术风图文和草稿发布。
+
 ## 免责声明与许可
 
 仅供个人学习与研究使用。只处理你自己设备上、你自己有权查看的聊天。请遵守微信、QQ、X、飞书等各软件的许可协议与当地法律法规，作者不对使用后果负责。代码以 [MIT](LICENSE) 协议开源。
