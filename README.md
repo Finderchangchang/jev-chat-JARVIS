@@ -245,11 +245,12 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
 
 <p align="center"><img src="docs/images/wechat-mp.png" width="180" alt="公众号二维码" /></p>
 
-想听真实需求：你在哪个聊天 App 上最想要这个副驾？希望它判断什么、怎么提示、什么绝对不能碰？扫码进群直接说。**1 至 6 群已满，不要再扫；7、8 群任选一个，请勿重复加入。**
+想听真实需求：你在哪个聊天 App 上最想要这个副驾？希望它判断什么、怎么提示、什么绝对不能碰？扫码进群直接说。**1 至 6 群已满，不要再扫；7、8、9 群任选一个，请勿重复加入。**
 
 <table align="center"><tr>
   <td align="center"><img src="docs/images/wechat-group-7.png" width="180" alt="7 群" /><br/><b>7 群</b></td>
   <td align="center"><img src="docs/images/wechat-group-8.png" width="180" alt="8 群" /><br/><b>8 群</b></td>
+  <td align="center"><img src="docs/images/wechat-group-9.png" width="180" alt="9 群" /><br/><b>9 群</b></td>
 </tr></table>
 
 <p align="center"><sub>以下六群已满，请勿再扫：</sub></p>
