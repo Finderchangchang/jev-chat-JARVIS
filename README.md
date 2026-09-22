@@ -29,7 +29,7 @@
 <td>感谢 <b>小优店铺</b> 赞助了本项目！小优店铺是一家数字商品与账号服务店铺，为本项目的用户提供选购渠道。<a href="https://faka.rainlanguage.top">点此前往</a>。</td>
 </tr>  <tr>
   <td width="240"><a href="https://agent.ai-tools.cn" target="_blank"><img src="docs/images/sponsors/vytal.jpg" alt="速创猫 Vytal" width="220"></a></td>
-  <td>感谢 <b>速创猫 Vytal</b> 赞助了本项目！速创猫 Vytal 通过可复用的视频工作流，降低内容制作门槛，服务内容创作者、培训机构及中小团队。<a href="https://agent.ai-tools.cn" target="_blank">点此前往</a>。</td>
+  <td>感谢 <b>速创猫 Vytal</b> 赞助了本项目！速创猫 Vytal 专业的 AI 视频工作流平台，可批量复用的视频工作流，降低内容制作门槛，服务内容创作者、培训机构及中小团队。<a href="https://agent.ai-tools.cn" target="_blank">点此前往</a>。</td>
   </tr>
 </table>
 
