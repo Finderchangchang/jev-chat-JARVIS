@@ -295,8 +295,6 @@ Copyright © 2026 Finderchangchang 与 jev-chat 贡献者。代码以 [MIT](LICE
 
 <p align="center">
   <img src="docs/images/donate/wechat-donate.png" width="180" alt="微信赞赏码（姓名已隐去）" />
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/images/donate/alipay-donate.jpg" width="180" alt="支付宝赞赏码（姓名已隐去）" />
 </p>
 
 <p align="center"><sub>随手支持，不用有压力；不支持也没关系，点个 Star 或提条建议同样能让我开心很久。</sub></p>
