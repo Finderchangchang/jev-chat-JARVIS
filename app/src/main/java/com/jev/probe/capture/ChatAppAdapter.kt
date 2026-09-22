@@ -14,7 +14,7 @@ import com.jev.probe.core.Msg
  *
  * [extract]'s three-way contract (v1.3 B stage — the service depends on it):
  * - `null`            → not in this app's chat window (list screen, moments,
- *                       settings…). The service does nothing at all.
+ *                       settings…). The service invalidates the previous conversation.
  * - messages empty    → in a chat window, but the tree carries no message text.
  *                       The service may fall back to screenshot + OCR. Each
  *                       adapter names below what proves "we are in a chat".
@@ -87,8 +87,8 @@ private val WECHAT_GROUP_COUNT_SUFFIX = Regex("""[（(]\d+[）)]""")
  * `我有企微，但是用不习惯`, a chat line). A candidate must not read like a
  * sentence (no Chinese punctuation) and must sit above the first bubble; among
  * what is left, a group title's trailing "(N)" member count wins when present.
- * Nothing qualifying → null (the caller's `lastGoodTitle` then carries the
- * previous stable title forward instead of guessing).
+ * Nothing qualifying → null. The caller waits for a confirmed title instead
+ * of carrying another conversation's title forward.
  */
 internal fun findWeChatTitle(
     root: AccessibilityNodeInfo,
