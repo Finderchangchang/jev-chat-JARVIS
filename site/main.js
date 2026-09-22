@@ -3,9 +3,12 @@
   "use strict";
 
   var JEV = window.JEV || {};
-  var repo = JEV.repo || "https://github.com/Finderchangchang/jev-chat-JARVIS";
+  var repo = JEV.repo || "https://github.com/jev-chat/jev-chat-jarvis";
   var version = JEV.version || "";
   var apkUrl = JEV.apkUrl || repo;
+  if (/(^|\.)chatjevs\.com$/.test(location.hostname) && version) {
+    apkUrl = "download/jev-assistant-v" + version + "-release.apk";
+  }
 
   /* ---------- 1. 把版本号和链接填到页面所有出现处 ---------- */
   function fill() {
