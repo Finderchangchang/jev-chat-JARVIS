@@ -97,10 +97,6 @@ class ReplyClient(private val prefs: Prefs) {
             } catch (_: Exception) { }
         }
         // Fallback: split lines.
-        val lines = content.split("\n").map { it.trim().trimStart('-', '*', '1', '2', '3', '.', ' ', '"') }
-            .filter { it.isNotBlank() }
-        val out = lines.take(3).toMutableList()
-        while (out.size < 3) out.add("（稍等，我看下）")
-        return out
+        return ReplyLineParser.parse(content)
     }
 }
