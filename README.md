@@ -146,10 +146,16 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
 想听真实需求：你在哪个聊天 App 上最想要这个副驾？希望它判断什么、怎么提示、什么绝对不能碰？扫码进群直接说。**1、2、3 群已满，不要再扫；4、5 群任选一个，请勿重复加入。**
 
 <table align="center"><tr>
-  <td align="center"><img src="docs/images/wechat-group-1.png" width="160" alt="1 群（已满）" /><br/><b>1 群 · 已满</b></td>
-  <td align="center"><img src="docs/images/wechat-group-2.png" width="160" alt="2 群" /><br/>2 群</td>
-  <td align="center"><img src="docs/images/wechat-group-3.png" width="160" alt="3 群" /><br/>3 群</td>
-  <td align="center"><img src="docs/images/wechat-group-4.png" width="160" alt="4 群" /><br/>4 群</td>
+  <td align="center"><img src="docs/images/wechat-group-4.png" width="180" alt="4 群" /><br/><b>4 群</b></td>
+  <td align="center"><img src="docs/images/wechat-group-5.png" width="180" alt="5 群" /><br/><b>5 群</b></td>
+</tr></table>
+
+<p align="center"><sub>以下三群已满，请勿再扫：</sub></p>
+
+<table align="center"><tr>
+  <td align="center"><img src="docs/images/wechat-group-1.png" width="110" alt="1 群（已满）" /><br/><sub>1 群 · 已满</sub></td>
+  <td align="center"><img src="docs/images/wechat-group-2.png" width="110" alt="2 群（已满）" /><br/><sub>2 群 · 已满</sub></td>
+  <td align="center"><img src="docs/images/wechat-group-3.png" width="110" alt="3 群（已满）" /><br/><sub>3 群 · 已满</sub></td>
 </tr></table>
 
 <p align="center"><sub>群二维码 7 天有效（4 群到 2026-09-28，5 群到 2026-09-29），过期了公众号私信要新码。</sub></p>
