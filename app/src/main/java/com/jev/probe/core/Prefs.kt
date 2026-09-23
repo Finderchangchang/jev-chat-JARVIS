@@ -197,7 +197,10 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
     fun judgeEndpoint(): String {
         val base = judgeBaseUrl.trim().trimEnd('/')
         return when (judgeProvider) {
-            PROVIDER_TYPESAFE -> "$base/v1/systemone"
+            // Vercel AI Gateway's TypeSafe-compatible path keeps the noul / choice /
+            // score request and response shapes byte for byte, so it composes the
+            // same `/v1/systemone` suffix as TypeSafe direct.
+            PROVIDER_TYPESAFE, PROVIDER_VERCEL -> "$base/v1/systemone"
             PROVIDER_CUSTOM -> judgeBaseUrl.trim()   // user supplies the full URL
             else -> "$base/alpha/decisions"
         }
@@ -257,6 +260,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
 
         const val PROVIDER_OPENROUTER = "openrouter"
         const val PROVIDER_TYPESAFE = "typesafe"
+        const val PROVIDER_VERCEL = "vercel"
         const val PROVIDER_CUSTOM = "custom"
 
         const val OCR_MLKIT = "mlkit"
@@ -267,6 +271,10 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val DEFAULT_JUDGE_MODEL_OPENROUTER = "typesafe/jev-1.13"
         const val DEFAULT_JUDGE_BASE_TYPESAFE = "https://api.typesafe.ai"
         const val DEFAULT_JUDGE_MODEL_TYPESAFE = "jev-latest"
+        // Vercel AI Gateway, TypeSafe-compatible path. The base is the gateway
+        // root only; judgeEndpoint() appends the shared `/v1/systemone` suffix.
+        const val DEFAULT_JUDGE_BASE_VERCEL = "https://ai-gateway.vercel.sh/typesafe"
+        const val DEFAULT_JUDGE_MODEL_VERCEL = "typesafe-ai/jev"
 
         // Reply route presets (OpenAI-compatible chat completions).
         const val DEFAULT_REPLY_BASE = "https://openrouter.ai/api/v1"
