@@ -106,7 +106,7 @@ adb install -r apk/jev-assistant-v1.3-release.apk
 ### 接口与模型
 
 - 判断 / 回复 / 视觉三路的地址、密钥、模型分别可填。
-- 内置 OpenRouter、TypeSafe 直连、DeepSeek 官方、通义兼容四套预设，每张卡一键连通测试。
+- 内置 OpenRouter、TypeSafe 直连、Vercel 网关、DeepSeek 官方、通义兼容五套预设，每张卡一键连通测试。
 - 只有一把密钥也能用：回复、视觉留空自动继承判断接口的配置。
 - 从旧版本升级时，原来那把密钥会一次性迁移到新的三卡结构。
 
