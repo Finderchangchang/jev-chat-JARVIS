@@ -8,11 +8,11 @@
 
 [![Stars](https://img.shields.io/github/stars/jev-chat/jev-chat-jarvis?style=flat-square&logo=github&label=Stars)](https://github.com/jev-chat/jev-chat-jarvis/stargazers)
 [![Forks](https://img.shields.io/github/forks/jev-chat/jev-chat-jarvis?style=flat-square&logo=github&label=Forks)](https://github.com/jev-chat/jev-chat-jarvis/forks)
-[![Version](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-v1.3-1f6feb?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-v1.4-1f6feb?style=flat-square)](CHANGELOG.md)
 [![Android](https://img.shields.io/badge/Android-11%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](#快速开始)
 [![License](https://img.shields.io/github/license/jev-chat/jev-chat-jarvis?style=flat-square)](LICENSE)
 
-[官网](https://chatjevs.com) · [下载 APK](apk/jev-assistant-v1.3-release.apk) · [历史版本](https://github.com/jev-chat/jev-chat-jarvis/releases) · [更新日志](CHANGELOG.md) · [macOS 版](https://github.com/jev-chat/jev-chat-mac) · [Windows 版](https://github.com/jev-chat/jev-chat-windows)
+[官网](https://chatjevs.com) · [下载 APK](apk/jev-assistant-v1.4-release.apk) · [历史版本](https://github.com/jev-chat/jev-chat-jarvis/releases) · [更新日志](CHANGELOG.md) · [macOS 版](https://github.com/jev-chat/jev-chat-mac) · [Windows 版](https://github.com/jev-chat/jev-chat-windows)
 
 </div>
 
@@ -47,9 +47,9 @@
 ## 为什么用它
 
 - **它先判断，再写字。** 大多数工具直接让模型编一句回复。Jev 先用判断模型给出对方真实意图、危险等级、该不该马上回，再据此起草回复。
-- **不动你的聊天软件。** 不 hook、不改包、不走任何 App 的接口或账号、不读数据库，只用系统无障碍服务读「屏幕上正在显示的对话」。微信这种混淆节点的也能读到。
+- **不动你的聊天软件。** 不 hook、不改包、不走任何 App 的接口或账号、不读数据库，只用系统无障碍服务读「屏幕上正在显示的对话」。
 - **发送权永远在你手里。** 程序只把回复填进输入框，从不自动发送，不碰转账 / 红包 / 收款。
-- **一套内核，多平台。** 微信、QQ、X 真机跑通，飞书靠 OCR 补正文。新增一个 App 只需写一个几十行的适配器。
+- **一套内核，多平台。** QQ、X 真机跑通，飞书靠 OCR 补正文。新增一个 App 只需写一个几十行的适配器。
 - **它认识你的人和事。** 本地知识库与联系人档案，分析时自动带上命中的笔记和这个人的历史，回复不会和你的设定打架。
 - **接口自己配。** 判断 / 回复 / 视觉三路分别可填，用你自己的密钥和额度，不经过任何中间服务器。
 - **隐私在本机。** 密钥存 App 私有空间，聊天内容只在分析那一刻发给你配置的接口，不落盘、不进日志。
@@ -58,7 +58,7 @@
 
 | 平台 | 状态 | 采集方式 | 备注 |
 |---|---|---|---|
-| 微信 Android | ✅ 全链路 | 伪装系统无障碍服务读气泡节点 | 8.0.52+ 混淆节点，伪装后 8.0.78 实测可读 |
+| 微信 Android | ⏸ 已停止支持 | — | 微信 8.0.52+ 对普通无障碍服务隐藏了消息文字，且近期对部分账号/设备的聊天界面开启防截屏（FLAG_SECURE），两条读取路径都不通，没有干净的读取方式；1.4 起不再读取微信 |
 | QQ Android | ✅ 全链路 | 无障碍读节点 | 9.3.50 实测（群聊）；1v1 按同结构推断 |
 | X / Twitter 私信 | ✅ 全链路 | 解析 Compose 节点的 content-desc | 12.25 实测，中文界面；英文界面未验 |
 | 飞书 / Lark | ✅ OCR 兜底（真机验证） | 无障碍读气泡矩形 + ML Kit 离线 OCR 识别正文 | 正文自绘不在无障碍树里，1.3 起对每个气泡矩形做 OCR；我/对方按已读状态判 |
@@ -69,17 +69,17 @@
 
 ## 快速开始
 
-**1. 装包。** 仓库里有签好名的 release 包：[`apk/jev-assistant-v1.3-release.apk`](apk/jev-assistant-v1.3-release.apk)（Android 11+）。各版本安装包也在 [Releases](https://github.com/jev-chat/jev-chat-jarvis/releases)。
+**1. 装包。** 仓库里有签好名的 release 包：[`apk/jev-assistant-v1.4-release.apk`](apk/jev-assistant-v1.4-release.apk)（Android 11+）。各版本安装包也在 [Releases](https://github.com/jev-chat/jev-chat-jarvis/releases)。
 
 ```bash
-adb install -r apk/jev-assistant-v1.3-release.apk
+adb install -r apk/jev-assistant-v1.4-release.apk
 ```
 
 **2. 填密钥。** 打开 App → 设置 →「接口」分三张卡：判断接口 / 回复接口 / 视觉接口。最简单只填「判断接口」一栏的 [OpenRouter](https://openrouter.ai/) API Key，其余两栏留空会自动继承这把密钥就能用。想换回复模型（默认 `deepseek/deepseek-chat-v3.1`，国内 Gemini / OpenAI 会被区域限制）就在「回复接口」选预设（OpenRouter / DeepSeek 官方 / 通义兼容）或自填地址，每张卡都有独立的一键连通测试。
 
 **3. 开权限。** 按主页向导开三项：
 
-- 无障碍（读消息；升级到 1.3 后需要把无障碍关掉再打开一次，截屏能力才生效）
+- 无障碍（读消息；升级到 1.3+ 后需要把无障碍关掉再打开一次，截屏能力才生效）
 - 悬浮窗 / 显示在其他应用上层（展示分析）
 - 自启动 + 省电无限制（小米 / HyperOS 必做，否则后台被冻结读不到消息）
 
@@ -106,6 +106,7 @@ adb install -r apk/jev-assistant-v1.3-release.apk
 ### 接口与模型
 
 - 判断 / 回复 / 视觉三路的地址、密钥、模型分别可填。
+- 判断接口新增内置预设「博查 Jev」，1.4 起排在选项最前（博查 Jev / OpenRouter / TypeSafe 直连 / 自定义），选中后自动填好服务地址 `https://jev.bocha.cn` 与模型 `bocha-jev-v1`（协议与 TypeSafe 一致），页面上会显示官方地址并支持一键复制，当前限时免费。全新安装默认使用博查 Jev；已经配置过判断接口的老用户不受影响，provider 和密钥都不会被改动。
 - 内置 OpenRouter、TypeSafe 直连、DeepSeek 官方、通义兼容四套预设，每张卡一键连通测试。
 - 只有一把密钥也能用：回复、视觉留空自动继承判断接口的配置。
 - 从旧版本升级时，原来那把密钥会一次性迁移到新的三卡结构。
@@ -162,16 +163,16 @@ adb install -r apk/jev-assistant-v1.3-release.apk
 </details>
 
 <details>
-<summary><b>升级到 1.3 之后没反应？</b></summary>
+<summary><b>升级之后没反应？</b></summary>
 
-把系统设置里的无障碍开关关掉再打开一次。1.3 新增了截屏能力，服务需要重新绑定才会生效。
+把系统设置里的无障碍开关关掉再打开一次。1.3 起新增了截屏能力，服务需要重新绑定才会生效。
 
 </details>
 
 ## 它怎么工作
 
 ```
-微信 / QQ / X / 飞书 ──(无障碍读节点)──▶ 采集最近消息
+QQ / X / 飞书 ──(无障碍读节点)──▶ 采集最近消息
                                   │
               ┌───────────────────┴───────────────────┐
               ▼                                        ▼
@@ -201,7 +202,7 @@ adb install -r apk/jev-assistant-v1.3-release.apk
 | App | 树的情况 | 适配器怎么做 |
 |---|---|---|
 | QQ | 节点开放，有 id | 正文 `id/mjn`、标题 `id/371`，按气泡贴哪侧头像判谁说的 |
-| 微信 | 对普通无障碍服务混淆节点 | 服务类名伪装成系统的 `SelectToSpeakService`，读 `id/bkl` 气泡，按左右判 |
+| 微信 | 已隐藏消息文字，部分设备还开启了防截屏 | 已停用：1.4 起不再接入采集分发，适配器代码保留在仓库中，以便日后微信策略变化时恢复 |
 | X | Compose，无 id，text 为空 | 解析 content-desc `发件人：正文。时间。Read`，发件人是「你」即我方 |
 | 飞书 | 正文自绘，树里没有文字 | 树上拿 bubble_content_container 矩形与已读状态，OCR 每个矩形的正文 |
 
@@ -238,7 +239,7 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
 - **X 只按中文界面验过**：分隔符 `：`、`上午 / 下午`、`Read` 是中文界面实测；英文界面只做了兜底，未验。
 - **群聊**：按一对一分析，「对方」与关系设定对群聊不准。
 - **中文**：Jev 主训练语言是英文，题目用英文、聊天内容保留中文；建议用自己的真实对话做一批标注校准（见 `tools/jev/`）。
-- 微信端的读取依赖当前版本的界面结构，微信更新后可能需要跟进适配。
+- **微信不可用**：微信从 8.0.52+ 对普通无障碍服务隐藏了消息文字，近期又对部分账号/设备的聊天界面开启了防截屏（FLAG_SECURE），两条读取路径都不通，这是微信自身的限制，本项目没有其它技术手段可以读取；1.4 起不再对微信做任何读取、截屏或填入，进入微信只提示一次「微信已限制读取，请在别的软件上使用」。
 - **知识库检索是标签/标题包含匹配**，不做语义检索，笔记请打好标签才能被命中。历史按「谁说 + 原文」去重，同一个人重复说同一句只记一次。
 - **OCR 依赖系统放行截屏**：无障碍服务要被系统允许截屏才能用，小米 / HyperOS 可能拒绝（面板会提示失败原因）；受保护窗口（`FLAG_SECURE`）截不到。
 - **OCR 只认屏幕上看得见的部分**：长消息被截断的部分读不到；识别有错字。
