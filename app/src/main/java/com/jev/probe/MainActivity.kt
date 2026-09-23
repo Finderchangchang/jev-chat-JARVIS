@@ -74,6 +74,20 @@ class MainActivity : AppCompatActivity() {
 
         // Readiness card
         container.addView(statusCard(ready, a11y, overlay, key))
+        if (!ready) {
+            val next = when {
+                !a11y -> Triple("下一步：开启无障碍", "允许助手读取当前聊天界面", {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                })
+                !overlay -> Triple("下一步：开启悬浮窗", "允许助手在聊天界面展示分析结果", {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                })
+                else -> Triple("下一步：配置判断接口", "填写密钥后即可测试连接", {
+                    startActivity(Intent(this, SettingsActivity::class.java))
+                })
+            }
+            container.addView(actionRow(next.first, next.second, next.third))
+        }
         container.addView(privacyHint())
 
         // Permission checklist
@@ -91,9 +105,12 @@ class MainActivity : AppCompatActivity() {
         })
 
         // Actions
-        container.addView(sectionLabel("其他"))
+        container.addView(sectionLabel("管理"))
         container.addView(actionRow("设置", "密钥 · 模型 · 关系 · 透明度 · 会话白名单") {
             startActivity(Intent(this, SettingsActivity::class.java))
+        })
+        container.addView(actionRow("知识库与联系人", "管理笔记、联系人和本地历史") {
+            startActivity(Intent(this, KnowledgeActivity::class.java))
         })
 
         // Master toggle

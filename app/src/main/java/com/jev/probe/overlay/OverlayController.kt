@@ -14,6 +14,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -21,6 +22,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.jev.probe.core.Analysis
 import com.jev.probe.core.ChatSnapshot
+import com.jev.probe.core.OcrReviewDraft
 import com.jev.probe.core.Prefs
 import com.jev.probe.core.RankedReply
 import kotlin.math.abs
@@ -44,7 +46,10 @@ class OverlayController(private val ctx: Context) {
     private var dangerDot: View? = null
     private var panel: LinearLayout? = null
     private var contentBox: LinearLayout? = null
+    private var contentScroll: ScrollView? = null
     private var expanded = false
+    private var detailExpanded = false
+    private var reviewingOcr = false
     private var lp: WindowManager.LayoutParams? = null
 
     var onManualAnalyze: (() -> Unit)? = null
@@ -58,6 +63,7 @@ class OverlayController(private val ctx: Context) {
     /** How much knowledge context the last analysis actually used. */
     private var ctxNotes = 0
     private var ctxHistory = 0
+    private var ctxNoteTitles: List<String> = emptyList()
 
     /** A caveat about how the current snapshot was captured (OCR mode). */
     private var noteText: String? = null
@@ -65,8 +71,11 @@ class OverlayController(private val ctx: Context) {
     /** Whether the overlay window is currently on screen. */
     fun isShowing(): Boolean = root != null
 
+    fun isReviewingOcr(): Boolean = reviewingOcr
+
     private var lastJudgment: Analysis? = null
     private var lastFill: ((String) -> Unit)? = null
+    private var pendingReplies: List<RankedReply>? = null
 
     /** Set when [showReplies] was handed a draftAndRank failure, so the panel
      *  can say so instead of silently showing "（未生成候选回复）". */
@@ -183,13 +192,15 @@ class OverlayController(private val ctx: Context) {
         scroll.addView(content)
         p.addView(scroll)
         contentBox = content
+        contentScroll = scroll
         panel = p
         return p
     }
 
     private fun iconBtn(glyph: String, onClick: () -> Unit) = TextView(ctx).apply {
         text = glyph; setTextColor(Color.parseColor("#6B7280")); textSize = 16f
-        setPadding(dp(10), dp(2), dp(6), dp(2))
+        minWidth = dp(48); minHeight = dp(48); gravity = Gravity.CENTER
+        contentDescription = if (glyph == "⚙") "打开设置" else "收起悬浮窗"
         setOnClickListener { onClick() }
     }
 
@@ -197,7 +208,7 @@ class OverlayController(private val ctx: Context) {
 
     private fun attachBubbleTouch(v: View, params: WindowManager.LayoutParams) {
         var startX = 0; var startY = 0; var touchX = 0f; var touchY = 0f
-        var moved = false; var downTime = 0L; var longFired = false
+        var moved = false; var longFired = false
         val longPress = Runnable {
             if (!moved) { longFired = true; showBubbleMenu() }
         }
@@ -205,7 +216,7 @@ class OverlayController(private val ctx: Context) {
             when (e.action) {
                 MotionEvent.ACTION_DOWN -> {
                     startX = params.x; startY = params.y; touchX = e.rawX; touchY = e.rawY
-                    moved = false; longFired = false; downTime = System.currentTimeMillis()
+                    moved = false; longFired = false
                     v.postDelayed(longPress, 500); true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -250,7 +261,8 @@ class OverlayController(private val ctx: Context) {
 
     private fun menuItem(label: String, onClick: () -> Unit) = TextView(ctx).apply {
         text = label; setTextColor(Color.parseColor("#111827")); textSize = 14f
-        setPadding(dp(12), dp(10), dp(12), dp(10)); setOnClickListener { onClick() }
+        minHeight = dp(48); gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(12), dp(8), dp(12), dp(8)); setOnClickListener { onClick() }
     }
 
     private fun openSettings() {
@@ -265,6 +277,12 @@ class OverlayController(private val ctx: Context) {
     private var collapsedY = dp(150)
 
     private fun toggle() {
+        if (expanded && reviewingOcr) {
+            reviewingOcr = false
+            setReviewFocus(false)
+            resetForNewConversation()
+            showIdle(null)
+        }
         expanded = !expanded
         val params = lp ?: return
         if (expanded) {
@@ -276,11 +294,13 @@ class OverlayController(private val ctx: Context) {
             if (params.y > maxTop) params.y = maxTop
             panel?.visibility = View.VISIBLE
         } else {
+            if (reviewingOcr) setReviewFocus(false)
             panel?.visibility = View.GONE
             params.x = collapsedX; params.y = collapsedY  // bubble returns to where it was
         }
         android.util.Log.d("JEVASSIST", "overlay: toggle expanded=$expanded x=${params.x} y=${params.y} saved=($collapsedX,$collapsedY)")
         root?.let { runCatching { wm.updateViewLayout(it, params) } }
+        if (expanded && reviewingOcr) setReviewFocus(true)
     }
 
     // ------------------------------------------------------------ public API
@@ -293,7 +313,10 @@ class OverlayController(private val ctx: Context) {
         // stale conversation) — either way an empty panel must never stay
         // literally blank.
         if (lastJudgment == null || contentBox?.childCount == 0) {
-            setContent(listOf(bigButton("分析当前对话") { onManualAnalyze?.invoke() }))
+            val views = ArrayList<View>()
+            title?.takeIf { it.isNotBlank() }?.let { views.add(hint("当前会话：$it")) }
+            views.add(bigButton("分析当前对话") { onManualAnalyze?.invoke() })
+            setContent(views)
         }
     }
 
@@ -308,8 +331,10 @@ class OverlayController(private val ctx: Context) {
     fun resetForNewConversation() {
         lastJudgment = null
         lastFill = null
+        pendingReplies = null
         noteText = null
         replyError = null
+        detailExpanded = false
         contentBox?.removeAllViews()
     }
 
@@ -324,16 +349,21 @@ class OverlayController(private val ctx: Context) {
     }
 
     fun showLoading() {
+        reviewingOcr = false
+        setReviewFocus(false)
         ensureRoot(); bubble?.alpha = 1f
         ctxNotes = 0; ctxHistory = 0   // counts for the round that is starting
+        ctxNoteTitles = emptyList()
         replyError = null              // this round has not failed (yet)
+        pendingReplies = null
         setContent(listOf(hint("分析中…")))
         if (!expanded) toggle()
     }
 
     /** How many knowledge notes / history lines went into the pending analysis. */
-    fun setContextInfo(notes: Int, history: Int) {
+    fun setContextInfo(notes: Int, history: Int, noteTitles: List<String> = emptyList()) {
         ctxNotes = notes; ctxHistory = history
+        ctxNoteTitles = noteTitles
     }
 
     /** A caveat line for the panel (OCR mode); null clears it. */
@@ -350,6 +380,8 @@ class OverlayController(private val ctx: Context) {
     }
 
     fun showError(msg: String) {
+        reviewingOcr = false
+        setReviewFocus(false)
         ensureRoot(); bubble?.alpha = 1f
         setContent(listOf(
             line("出错了", "#DC2626", 14f, true),
@@ -358,13 +390,25 @@ class OverlayController(private val ctx: Context) {
 
     fun showJudgment(a: Analysis) {
         lastJudgment = a
-        render(a, generating = true)
+        val ready = pendingReplies
+        if (ready == null) {
+            render(a, generating = true)
+        } else {
+            pendingReplies = null
+            val combined = a.copy(rankedReplies = ready)
+            lastJudgment = combined
+            render(combined, generating = false)
+        }
     }
 
     fun showReplies(ranked: List<RankedReply>, error: String? = null, onFill: (String) -> Unit) {
         lastFill = onFill
         replyError = error
-        val a = lastJudgment?.copy(rankedReplies = ranked) ?: return
+        val a = lastJudgment?.copy(rankedReplies = ranked)
+        if (a == null) {
+            pendingReplies = ranked
+            return
+        }
         lastJudgment = a
         render(a, generating = false)
     }
@@ -374,7 +418,88 @@ class OverlayController(private val ctx: Context) {
     fun hide() {
         val r = root ?: return
         runCatching { wm.removeView(r) }
-        root = null; bubble = null; panel = null; contentBox = null; dangerDot = null; expanded = false
+        root = null; bubble = null; panel = null; contentBox = null; contentScroll = null
+        dangerDot = null; expanded = false; reviewingOcr = false
+    }
+
+    /** 手动 OCR 后先校对文本和说话方，再交给分析流程。 */
+    fun showOcrReview(snapshot: ChatSnapshot, onConfirm: (ChatSnapshot) -> Unit) {
+        ensureRoot()
+        if (root == null) return
+        reviewingOcr = true
+        val draft = OcrReviewDraft(snapshot.messages)
+        val views = ArrayList<View>()
+        views.add(line("校对识别结果", "#111827", 16f, true))
+        views.add(hint("识别可能有错字；逐条检查后再分析。"))
+        val edits = snapshot.messages.mapIndexed { index, msg ->
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                background = card(12, Color.parseColor("#F3F4F6"))
+                setPadding(dp(10), dp(8), dp(10), dp(8))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(8) }
+            }
+            val sideButton = TextView(ctx).apply {
+                text = "第 ${index + 1} 条 · ${if (msg.side == "me") "我说" else "对方说"}（点击切换）"
+                textSize = 13f
+                setTextColor(Color.parseColor("#3A7AFE"))
+                minHeight = dp(48)
+                gravity = Gravity.CENTER_VERTICAL
+                setOnClickListener {
+                    val side = draft.switchSide(index)
+                    text = "第 ${index + 1} 条 · ${if (side == "me") "我说" else "对方说"}（点击切换）"
+                }
+            }
+            val edit = EditText(ctx).apply {
+                setText(msg.text)
+                textSize = 14f
+                setTextColor(Color.parseColor("#111827"))
+                background = card(8, Color.WHITE)
+                setPadding(dp(8), dp(6), dp(8), dp(6))
+                minLines = 2
+            }
+            row.addView(sideButton)
+            row.addView(edit)
+            views.add(row)
+            edit
+        }
+        views.add(bigButton("确认并分析") {
+            edits.forEachIndexed { index, edit -> draft.updateText(index, edit.text.toString()) }
+            val corrected = draft.confirmedMessages()
+            if (corrected.isEmpty()) {
+                toast("请保留至少一条消息")
+            } else {
+                reviewingOcr = false
+                setReviewFocus(false)
+                onConfirm(snapshot.copy(messages = corrected, note = "已人工校对识别内容"))
+            }
+        })
+        views.add(reAnalyzeBtn().apply {
+            text = "取消校对"
+            setOnClickListener {
+                reviewingOcr = false
+                setReviewFocus(false)
+                resetForNewConversation()
+                showIdle(snapshot.title)
+                if (expanded) toggle()
+            }
+        })
+        setContent(views)
+        contentScroll?.layoutParams = contentScroll?.layoutParams?.apply {
+            height = (screenH * 0.52f).roundToInt()
+        }
+        if (!expanded) toggle() else setReviewFocus(true)
+    }
+
+    private fun setReviewFocus(enabled: Boolean) {
+        val params = lp ?: return
+        params.flags = if (enabled) {
+            params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+        } else {
+            params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        root?.let { runCatching { wm.updateViewLayout(it, params) } }
     }
 
     // --------------------------------------------------------------- rendering
@@ -389,10 +514,14 @@ class OverlayController(private val ctx: Context) {
         panel?.background = card(18, panelBg(), stroke = true) // re-apply in case opacity changed
         val views = ArrayList<View>()
 
-        // What context this read was based on (knowledge base / remembered history).
-        views.add(hint(
-            if (ctxNotes == 0 && ctxHistory == 0) "未用知识库"
-            else "知识库 $ctxNotes 条 · 历史 $ctxHistory 条"))
+        if (detailExpanded) {
+            views.add(hint(
+                if (ctxNotes == 0 && ctxHistory == 0) "未用知识库"
+                else "知识库 $ctxNotes 条 · 历史 $ctxHistory 条"))
+            if (ctxNoteTitles.isNotEmpty()) {
+                views.add(hint("引用笔记：${ctxNoteTitles.joinToString("、")}"))
+            }
+        }
 
         // How this snapshot was captured, when it changes how to read it.
         noteText?.let { if (it.isNotBlank()) views.add(hint(it)) }
@@ -406,15 +535,15 @@ class OverlayController(private val ctx: Context) {
         // Intent headline.
         a.trueIntent?.let {
             views.add(line("对方真实意图：${INTENT[it.choice] ?: it.choice}", "#111827", 15f, true))
-            views.add(hint("把握 ${(it.confidence * 100).roundToInt()}%"))
+            if (detailExpanded) views.add(hint("把握 ${(it.confidence * 100).roundToInt()}%"))
         }
         // Compact secondary line: needs · action · reply-now.
         val bits = ArrayList<String>()
         a.sheNeeds?.let { bits.add("要${(NEEDS[it.choice] ?: it.choice)}") }
         a.bestAction?.let { bits.add(ACTION[it.choice] ?: it.choice) }
         a.shouldReplyNow?.let { bits.add(if (it >= 0.5) "可给实质" else "先别给实质") }
-        if (bits.isNotEmpty()) views.add(line(bits.joinToString("  ·  "), "#374151", 13f))
-        a.tensionResolved?.let { if (it >= 0.7) views.add(line("✓ 紧张已缓解", "#16A34A", 12f)) }
+        if (detailExpanded && bits.isNotEmpty()) views.add(line(bits.joinToString("  ·  "), "#374151", 13f))
+        if (detailExpanded) a.tensionResolved?.let { if (it >= 0.7) views.add(line("✓ 紧张已缓解", "#16A34A", 12f)) }
 
         views.add(divider())
         views.add(line("候选回复（Jev 排序）", "#9CA3AF", 12f))
@@ -422,7 +551,7 @@ class OverlayController(private val ctx: Context) {
             views.add(hint("生成中…"))
         } else {
             val fill = lastFill ?: {}
-            a.rankedReplies.forEachIndexed { i, r ->
+            a.rankedReplies.take(if (detailExpanded) 3 else 1).forEachIndexed { i, r ->
                 views.add(replyCard(i + 1, r.text, (r.prob * 100).roundToInt(), fill))
             }
             if (a.rankedReplies.isEmpty()) {
@@ -430,9 +559,21 @@ class OverlayController(private val ctx: Context) {
                 views.add(hint(msg))
             }
         }
+        if (a.rankedReplies.size > 1 || detailExpanded) {
+            views.add(reAnalyzeBtn().apply {
+                text = if (detailExpanded) "收起详情" else "查看全部回复与依据"
+                setOnClickListener {
+                    detailExpanded = !detailExpanded
+                    render(a, generating)
+                }
+            })
+        }
         views.add(reAnalyzeBtn())
 
         setContent(views)
+        contentScroll?.layoutParams = contentScroll?.layoutParams?.apply {
+            height = if (detailExpanded) (screenH * 0.40f).roundToInt() else ViewGroup.LayoutParams.WRAP_CONTENT
+        }
         if (!expanded) toggle()
     }
 
@@ -484,6 +625,7 @@ class OverlayController(private val ctx: Context) {
 
     private fun pill(label: String, primary: Boolean, onClick: () -> Unit) = TextView(ctx).apply {
         text = label; textSize = 13f; gravity = Gravity.CENTER
+        minHeight = dp(48)
         setTypeface(typeface, Typeface.BOLD)
         setTextColor(if (primary) Color.WHITE else Color.parseColor("#3A7AFE"))
         background = card(18, if (primary) Color.parseColor("#3A7AFE") else Color.parseColor("#FFFFFF"), stroke = !primary)
@@ -496,6 +638,7 @@ class OverlayController(private val ctx: Context) {
 
     private fun reAnalyzeBtn() = TextView(ctx).apply {
         text = "重新分析"; textSize = 13f; gravity = Gravity.CENTER
+        minHeight = dp(48)
         setTextColor(Color.parseColor("#6B7280"))
         setPadding(dp(10), dp(10), dp(10), dp(4))
         setOnClickListener { onManualAnalyze?.invoke() }

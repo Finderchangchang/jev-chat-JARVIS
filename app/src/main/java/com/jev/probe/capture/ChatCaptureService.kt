@@ -13,6 +13,7 @@ import com.jev.probe.capture.ocr.MlKitOcr
 import com.jev.probe.capture.ocr.OcrLine
 import com.jev.probe.capture.ocr.ScreenCapture
 import com.jev.probe.core.BubbleRect
+import com.jev.probe.core.AnalysisIdentity
 import com.jev.probe.core.ChatSnapshot
 import com.jev.probe.core.Msg
 import com.jev.probe.core.Prefs
@@ -122,6 +123,8 @@ open class ChatCaptureService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         if (!prefs.enabled) { main.post { overlay?.hide() }; return }
+        // 校对框需要获得输入焦点，期间不要把它当成离开聊天窗口而隐藏。
+        if (overlay?.isReviewingOcr() == true) return
 
         val type = event.eventType
         // Decide "did we leave the chat app" from the REAL active window, not the
@@ -140,11 +143,16 @@ open class ChatCaptureService : AccessibilityService() {
             val fg = rootInActiveWindow?.packageName?.toString()
             if (fg != null && fg !in adapters) {
                 foregroundPkg = fg
+                currentSnapshot = null
+                pendingSnapshot = null
                 val drop = fg == packageName ||
                     fg.contains("launcher", ignoreCase = true) ||
                     fg == "com.miui.home" ||
                     fg == "com.android.systemui"
-                main.post { if (drop) overlay?.hide() else overlay?.showIdle(null) }
+                main.post {
+                    overlay?.resetForNewConversation()
+                    if (drop) overlay?.hide() else overlay?.showIdle(null)
+                }
                 return
             }
         }
@@ -205,6 +213,7 @@ open class ChatCaptureService : AccessibilityService() {
         // whatever was shown before must not leak into it.
         main.post { overlay?.resetForNewConversation() }
         lastSignature = sig
+        pendingSnapshot = null
         Log.d(TAG, "snapshot[$pkg] title=${snapshot.title} n=${snapshot.messages.size} " +
             snapshot.messages.takeLast(6).joinToString(" | ") { "${it.side}:${it.text.length}" }) // sides + lengths only, never content
 
@@ -258,13 +267,21 @@ open class ChatCaptureService : AccessibilityService() {
             } catch (e: Exception) {
                 Log.w(TAG, "context build failed: ${e.javaClass.simpleName}"); null
             }
-            main.post { overlay?.setContextInfo(ctx?.notes?.size ?: 0, ctx?.history?.size ?: 0) }
+            main.post {
+                if (!isCurrentAnalysis(snapshot, pkg)) return@post
+                overlay?.setContextInfo(
+                    ctx?.notes?.size ?: 0,
+                    ctx?.history?.size ?: 0,
+                    ctx?.notes?.map { it.title.ifBlank { "未命名笔记" } }.orEmpty()
+                )
+            }
 
             // Judgment is fast (~1s) — show it immediately.
             submit {
                 val judgment = client.judge(snapshot, rel, ctx)
                 main.post {
-                    if (judgment.error != null) { analyzing = false; overlay?.showError(judgment.error) }
+                    if (!isCurrentAnalysis(snapshot, pkg)) return@post
+                    if (judgment.error != null) overlay?.showError(judgment.error)
                     else overlay?.showJudgment(judgment)
                 }
             }
@@ -277,10 +294,20 @@ open class ChatCaptureService : AccessibilityService() {
                 }
                 main.post {
                     analyzing = false
-                    overlay?.showReplies(ranked, replyError) { text -> fillInput(text) }
+                    if (isCurrentAnalysis(snapshot, pkg)) {
+                        overlay?.showReplies(ranked, replyError) { text -> fillInput(text) }
+                    }
+                    if (pendingSnapshot !== snapshot && pendingSnapshot != null) runAnalysis()
                 }
             }
         }
+    }
+
+    private fun isCurrentAnalysis(snapshot: ChatSnapshot, pkg: String): Boolean {
+        val shown = currentSnapshot ?: return false
+        val foreground = rootInActiveWindow?.packageName?.toString() ?: return false
+        return foreground == pkg && activePkg == pkg &&
+            AnalysisIdentity.of(pkg, shown) == AnalysisIdentity.of(pkg, snapshot)
     }
 
     // ------------------------------------------------------------------ OCR
@@ -447,6 +474,16 @@ open class ChatCaptureService : AccessibilityService() {
         }
         if (!prefs.isAllowed(snapshot.title)) { overlay?.hide(); return }
 
+        if (manual) {
+            overlay?.showOcrReview(snapshot) { corrected ->
+                acceptOcrSnapshot(corrected, pkg, manual = true)
+            }
+            return
+        }
+        acceptOcrSnapshot(snapshot, pkg, manual = false)
+    }
+
+    private fun acceptOcrSnapshot(snapshot: ChatSnapshot, pkg: String, manual: Boolean) {
         if (pkg.isNotEmpty() && pkg != activePkg) { activePkg = pkg; lastSignature = "" }
         currentSnapshot = snapshot
         val sig = snapshot.signature()
@@ -459,6 +496,7 @@ open class ChatCaptureService : AccessibilityService() {
         // new or being force-refreshed, so drop whatever was shown before.
         overlay?.resetForNewConversation()
         lastSignature = sig
+        pendingSnapshot = null
 
         val auto = prefs.ocrAutoAnalyze && prefs.autoAnalyze && snapshot.latestFrom == "other"
         if (manual || auto) {

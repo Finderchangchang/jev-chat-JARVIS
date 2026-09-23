@@ -67,7 +67,7 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(header("设置"))
 
         // =================== 接口 ===================
-        root.addView(section("接口"))
+        val apiSection = sectionGroup(root, "模型接口", "判断、回复和视觉接口", true)
 
         // --- 判断接口（Jev） ---
         val judgeCard = card()
@@ -145,7 +145,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         })
         judgeCard.addView(judgeResult)
-        root.addView(judgeCard)
+        apiSection.addView(judgeCard)
 
         // --- 回复接口 ---
         val replyCard = card()
@@ -200,7 +200,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         })
         replyCard.addView(replyResult)
-        root.addView(replyCard)
+        apiSection.addView(replyCard)
 
         // --- 视觉接口 ---
         val visionCard = card()
@@ -258,10 +258,10 @@ class SettingsActivity : AppCompatActivity() {
             }
         })
         visionCard.addView(visionResult)
-        root.addView(visionCard)
+        apiSection.addView(visionCard)
 
         // =================== 分析 ===================
-        root.addView(section("分析"))
+        val analysisSection = sectionGroup(root, "分析规则", "自动分析、OCR 和会话上下文")
         val card2 = card()
         card2.addView(label("关系描述（给 Jev 判断用）"))
         val relEdit = edit(prefs.relationship, Prefs.DEFAULT_REL)
@@ -321,10 +321,10 @@ class SettingsActivity : AppCompatActivity() {
             }
         })
         card2.addView(kbResult)
-        root.addView(card2)
+        analysisSection.addView(card2)
 
         // =================== 外观 ===================
-        root.addView(section("外观"))
+        val appearanceSection = sectionGroup(root, "外观", "悬浮窗显示方式")
         val card3 = card()
         val opacityLabel = label("悬浮窗不透明度：${prefs.overlayOpacity}%")
         card3.addView(opacityLabel)
@@ -340,10 +340,10 @@ class SettingsActivity : AppCompatActivity() {
             })
         }
         card3.addView(seek)
-        root.addView(card3)
+        appearanceSection.addView(card3)
 
         // =================== 关于与隐私 ===================
-        root.addView(section("关于与隐私"))
+        val privacySection = sectionGroup(root, "关于与隐私", "数据使用说明与项目版本")
         val aboutCard = card()
         aboutCard.addView(text(
             "这个 App 会读取你当前聊天窗口的文字，发给你自己配置的模型接口做判断和起草回复。作者不运营服务器，收不到你的数据。",
@@ -351,7 +351,7 @@ class SettingsActivity : AppCompatActivity() {
         aboutCard.addView(cardBtn("隐私政策") { openUrl(PRIVACY_URL) })
         aboutCard.addView(cardBtn("开源仓库") { openUrl(REPO_URL) })
         aboutCard.addView(text(versionLabel(), 11f, sub).apply { setPadding(0, dp(10), 0, dp(2)) })
-        root.addView(aboutCard)
+        privacySection.addView(aboutCard)
 
         // =================== 保存 ===================
         root.addView(primaryBtn("保存全部设置") {
@@ -546,6 +546,33 @@ class SettingsActivity : AppCompatActivity() {
     // atoms
     private fun header(t: String) = text(t, 24f, ink, bold = true).apply { setPadding(0, 0, 0, dp(4)) }
     private fun section(t: String) = text(t, 12f, sub, bold = true).apply { setPadding(dp(2), dp(16), 0, dp(6)) }
+    private fun sectionGroup(parent: LinearLayout, title: String, summary: String, initiallyOpen: Boolean = false): LinearLayout {
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = if (initiallyOpen) View.VISIBLE else View.GONE
+        }
+        val head = card().apply {
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            contentDescription = "$title，${if (initiallyOpen) "已展开" else "已收起"}，点击切换"
+        }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        row.addView(text(title, 16f, ink, bold = true).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        val arrow = text(if (initiallyOpen) "收起⌃" else "展开⌄", 13f, accent)
+        row.addView(arrow)
+        head.addView(row)
+        head.addView(text(summary, 12f, sub).apply { setPadding(0, dp(4), 0, 0) })
+        head.setOnClickListener {
+            val open = body.visibility != View.VISIBLE
+            body.visibility = if (open) View.VISIBLE else View.GONE
+            arrow.text = if (open) "收起⌃" else "展开⌄"
+            head.contentDescription = "$title，${if (open) "已展开" else "已收起"}，点击切换"
+        }
+        parent.addView(head)
+        parent.addView(body)
+        return body
+    }
     private fun label(t: String) = text(t, 13f, ink, bold = true).apply { setPadding(0, dp(12), 0, dp(4)) }
     private fun cardTitle(t: String) = text(t, 16f, ink, bold = true).apply { setPadding(0, dp(10), 0, dp(4)) }
     private fun resultText() = text("", 12.5f, sub).apply { setPadding(0, dp(10), 0, dp(2)) }
