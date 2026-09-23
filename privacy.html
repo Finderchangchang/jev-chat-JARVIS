@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme-init>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>隐私政策 — Jev 聊天助手</title>
+<meta name="description" content="Jev 聊天助手隐私政策：如实说明会离开设备的数据（发给谁、发什么、什么时候发）、只存在本机的数据、权限用途、你的控制权与第三方模型服务商。作者不运营服务器，收不到你的聊天内容。">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://chatjevs.com/privacy.html">
+<meta property="og:title" content="隐私政策 — Jev 聊天助手">
+<meta property="og:description" content="如实说明发给谁、发什么、什么时候发、存在哪、怎么删。作者不运营服务器。">
+<meta property="og:image" content="https://chatjevs.com/assets/og.png">
+<meta property="og:site_name" content="Jev 聊天助手">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="隐私政策 — Jev 聊天助手">
+<meta name="twitter:description" content="如实说明发给谁、发什么、什么时候发、存在哪、怎么删。作者不运营服务器。">
+<meta name="twitter:image" content="https://chatjevs.com/assets/og.png">
+<script>
+  window.JEV = {
+    version: "1.3",
+    apkUrl: "https://github.com/jev-chat/jev-chat-jarvis/raw/main/apk/jev-assistant-v1.3-release.apk",
+    repo: "https://github.com/jev-chat/jev-chat-jarvis"
+  };
+  // 提前应用主题，避免首屏闪白
+  (function () {
+    try {
+      var t = localStorage.getItem("jev-theme");
+      if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap"></noscript>
+<link rel="stylesheet" href="style.css?v=20260923a">
+</head>
+<body>
+
+<a class="skip-link" href="#main">跳到主要内容</a>
+
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="index.html" aria-label="Jev 聊天助手 首页">
+      <img src="assets/favicon.svg" alt="" width="30" height="30" class="brand-mark">
+      <span class="brand-name">Jev 聊天助手</span>
+    </a>
+
+    <nav class="nav-menu" id="navMenu" aria-label="主导航">
+      <a href="index.html#features">功能</a>
+      <a href="index.html#platforms">平台</a>
+      <a href="index.html#start">快速开始</a>
+      <a href="index.html#how">原理</a>
+      <a href="index.html#faq">FAQ</a>
+    </nav>
+
+    <div class="nav-actions">
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="切换深浅色主题" title="切换深浅色">
+        <svg class="ico-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><g stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 2.6v2.4M12 19v2.4M2.6 12h2.4M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3L17 7M7 17l-1.7 1.7"/></g></svg>
+        <svg class="ico-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.4A8.6 8.6 0 1 1 9.6 4a7 7 0 0 0 10.4 10.4z" fill="currentColor"/></svg>
+      </button>
+      <a class="nav-star" data-jev-repo href="#" target="_blank" rel="noopener" aria-label="GitHub 仓库，点个 Star" title="好用的话点个 Star"><svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><span class="nav-star-text">Star</span><b data-jev-stars>1.3k</b></a>
+      <a class="btn btn-primary btn-sm nav-cta" data-jev-apk href="#">下载 Android 版</a>
+      <button class="icon-btn burger" id="burger" type="button" aria-label="打开菜单" aria-expanded="false" aria-controls="navMenu">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.5 7h17M3.5 12h17M3.5 17h17"/></g></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="sec" id="policy-top">
+  <div class="wrap wrap-narrow policy">
+
+    <p class="eyebrow reveal">隐私政策</p>
+    <h1 class="reveal" style="font-size:36px;line-height:46px;letter-spacing:-.8px;margin-bottom:18px;">隐私政策</h1>
+
+    <p class="lead reveal"><strong>Jev 聊天助手在你的设备上读取你正在看的聊天，把内容发给你自己配置的模型接口做判断和起草回复。作者不运营服务器，收不到你的任何数据。</strong></p>
+
+    <p class="meta reveal">版本 v1.0，生效日期 2026-09-23。适用范围：Android 端 <a href="https://github.com/jev-chat/jev-chat-jarvis" target="_blank" rel="noopener">jev-chat-jarvis</a>。Windows 版（<a href="https://github.com/jev-chat/jev-chat-windows" target="_blank" rel="noopener">jev-chat-windows</a>）与 macOS 版（<a href="https://github.com/jev-chat/jev-chat-jarvis-mac" target="_blank" rel="noopener">jev-chat-jarvis-mac</a>）是各自独立的仓库和安装包，不在本政策范围内，请分别查看它们自己的说明。</p>
+
+    <p class="reveal">如果你更习惯先看结论：本项目<strong>不是</strong>"零数据收集"产品——它确实会把你正在看的聊天文字发给一个第三方模型接口，但那个接口地址是你自己在设置里填的，不是作者的服务器。除此之外的数据只留在你手机里，删应用或点一键清空都能删干净。下面逐项说清楚"发了什么、发给谁、什么时候发、存在哪、怎么删"。</p>
+
+    <hr class="reveal">
+
+    <h2 class="reveal" id="overview">1. 一句话总览</h2>
+    <ul class="reveal">
+      <li>会离开你设备的，只有「用于生成判断和回复」这一批聊天文字和背景信息，且只发往<strong>你自己在设置页填写的模型接口地址</strong>。</li>
+      <li>作者不运营任何后端服务器，代码里也没有向作者或任何固定第三方回传数据的逻辑；你的聊天内容作者看不到，也拿不到。</li>
+      <li>截图本身从不上传，识别文字（OCR）全部在手机本地完成。</li>
+      <li>密钥、设置、知识库、聊天历史都只存在手机本地的 App 私有目录，其它 App 读不到；卸载即清空。</li>
+      <li>无广告、无第三方统计 SDK、不用 Cookie 或广告标识符、不读通讯录、不读位置、不读其它 App 列表。</li>
+    </ul>
+
+    <h2 class="reveal" id="leaves-device">2. 会离开你设备的数据</h2>
+    <p class="reveal">只发往一个地方：<strong>你自己在设置页配置的模型接口地址</strong>（默认是 OpenRouter 转发的 TypeSafe Jev / DeepSeek，你可以改成 TypeSafe 直连、DeepSeek 官方、通义千问兼容接口，或任意 OpenAI 兼容地址）。作者的服务器不在这条链路上，作者收不到、也看不到这些内容。</p>
+
+    <div class="table-scroll reveal">
+      <table class="legal">
+        <thead>
+          <tr>
+            <th scope="col">接口</th>
+            <th scope="col">默认服务商（可自行更换）</th>
+            <th scope="col">每次发送的内容</th>
+            <th scope="col">触发时机</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">判断接口</th>
+            <td>OpenRouter 转发 TypeSafe Jev</td>
+            <td>当前聊天窗口最近 10 条消息的文本与方向（我方/对方）+ 你自己填写的关系描述 +（若开启知识库）命中的笔记与联系人备注 +（若开启历史记录）该联系人最近 N 条历史消息（N 默认 30，可调 0–100）</td>
+            <td>你触发一次分析（自动或手动）</td>
+          </tr>
+          <tr>
+            <th scope="row">回复接口</th>
+            <td>OpenRouter 上的 DeepSeek</td>
+            <td>同一批最近 10 条消息拼成的对话文本 + 同一份背景信息 + 生成提示词</td>
+            <td>判断完成后起草候选回复时</td>
+          </tr>
+          <tr>
+            <th scope="row">视觉接口</th>
+            <td>可配置，默认与判断接口一致</td>
+            <td>仅在你于设置页主动点击「测试视觉」时，发送一张 1×1 白色测试图；不在日常采集主路径里</td>
+            <td>你手动点「测试视觉」</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="reveal">API 密钥会作为请求头（<code>Authorization</code>）随对应请求发给你自己配置的那个接口，只用于身份校验，不发往其它任何地方。</p>
+
+    <p class="reveal"><strong>不会发送的内容</strong>：截图本身（识别文字在手机本地完成，见第 4 节）、通讯录、设备标识符、位置信息、其它 App 的列表或使用情况。</p>
+
+    <p class="reveal">模型服务商拿到这些内容后如何处理，由它们各自的隐私政策决定，需要你自己去看：</p>
+    <ul class="reveal">
+      <li>OpenRouter：<a href="https://openrouter.ai/privacy" target="_blank" rel="noopener">openrouter.ai/privacy</a></li>
+      <li>DeepSeek：<a href="https://www.deepseek.com/privacy-policy" target="_blank" rel="noopener">deepseek.com/privacy-policy</a>（或所选服务商官网的隐私政策页面）</li>
+      <li>阿里云百炼（通义千问兼容接口）：以阿里云官方隐私政策为准</li>
+      <li>TypeSafe：以其官网公示的隐私政策为准</li>
+    </ul>
+    <p class="reveal">如果你自己填的是别的接口地址，那家服务商的政策同样适用，作者无法替它们承诺任何事。</p>
+
+    <h2 class="reveal" id="local-only">3. 只存在本机的数据</h2>
+    <p class="reveal">以下内容全部存放在 App 的私有目录（<code>/data/data/&lt;包名&gt;/</code>），其它 App 无法访问；应用私有目录内的数据不会随任何后台同步离开手机。</p>
+
+    <div class="table-scroll reveal">
+      <table class="legal">
+        <thead>
+          <tr>
+            <th scope="col">数据</th>
+            <th scope="col">用途</th>
+            <th scope="col">存放位置</th>
+            <th scope="col">保留时长</th>
+            <th scope="col">如何删除</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">API 密钥、三路接口地址与模型名</th>
+            <td>连接你自己配置的模型服务</td>
+            <td>SharedPreferences</td>
+            <td>直到你修改或清除</td>
+            <td>设置页里改写，或卸载应用</td>
+          </tr>
+          <tr>
+            <th scope="row">关系描述、会话白名单、各项开关、悬浮窗位置与透明度</th>
+            <td>记住你的个性化配置</td>
+            <td>SharedPreferences</td>
+            <td>直到你修改</td>
+            <td>设置页里改，或卸载应用</td>
+          </tr>
+          <tr>
+            <th scope="row">知识库笔记（标题、内容、标签）</th>
+            <td>你手动建的背景资料，供判断时检索引用</td>
+            <td><code>filesDir/kb/notes.json</code></td>
+            <td>直到你删除</td>
+            <td>设置页「清空知识库与历史」，或逐条删除</td>
+          </tr>
+          <tr>
+            <th scope="row">联系人档案（名称、别名、关系、备注）</th>
+            <td>你手动建的联系人背景信息</td>
+            <td><code>filesDir/kb/contacts.json</code></td>
+            <td>直到你删除</td>
+            <td>同上</td>
+          </tr>
+          <tr>
+            <th scope="row">聊天历史</th>
+            <td>供判断时参考该联系人过往对话（默认关闭）</td>
+            <td><code>filesDir/kb/logs/&lt;联系人&gt;.json</code></td>
+            <td>每位联系人最多保留 300 条，开启后才开始记录</td>
+            <td>设置页关闭该开关不再新增，「清空知识库与历史」一键清空</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="reveal">设置页的「清空知识库与历史」会删除 <code>kb</code> 目录下的全部内容，不影响密钥与其它设置；卸载应用会连同上述所有数据一起删除，没有云端备份。</p>
+    <p class="reveal">日志（logcat）只输出消息条数、字符长度、异常类名这类调试信息，<strong>不输出聊天正文</strong>。</p>
+
+    <h2 class="reveal" id="permissions">4. 权限与用途</h2>
+    <div class="table-scroll reveal">
+      <table class="legal">
+        <thead>
+          <tr>
+            <th scope="col">权限</th>
+            <th scope="col">用途</th>
+            <th scope="col">不做什么</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">无障碍服务</th>
+            <td>读取当前聊天窗口的文字，把选中的回复填进输入框</td>
+            <td>不点发送键，不操作转账/红包/收款，不读取其它应用的数据库</td>
+          </tr>
+          <tr>
+            <th scope="row">截屏能力（无障碍服务附带）</th>
+            <td>控件树读不到正文时（例如飞书），截取当前窗口做本地 OCR</td>
+            <td>截图只在内存中处理，识别完即释放，不保存、不上传</td>
+          </tr>
+          <tr>
+            <th scope="row">悬浮窗</th>
+            <td>在聊天上方显示分析面板</td>
+            <td>不采集其它应用界面</td>
+          </tr>
+          <tr>
+            <th scope="row">网络</th>
+            <td>访问你自己配置的模型接口</td>
+            <td>不连接作者的任何服务器，无遥测、无埋点上报</td>
+          </tr>
+          <tr>
+            <th scope="row">前台服务 + 通知</th>
+            <td>保持服务不被系统冻结、清理</td>
+            <td>不推送营销通知</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="reveal" id="not-do">5. 我们不做什么</h2>
+    <ul class="reveal">
+      <li>不自动发送消息：程序只把候选回复填进输入框，最后一步永远由你手动点发送。</li>
+      <li>不碰转账、红包、收款相关操作。</li>
+      <li>只处理你自己设备上、你自己有权查看的聊天，不处理其它人的设备。</li>
+      <li>无广告、无第三方分析或统计 SDK（不含 Google Analytics、Firebase、友盟等）、不使用 Cookie 或广告标识符。</li>
+      <li>作者不运营任何服务器，不接收、不留存、不出售、不用于训练任何模型你的聊天内容——因为这些内容压根不经过作者。</li>
+      <li>开源：以上每一条说法，都可以在 GitHub 仓库里对照源码核实：<a href="https://github.com/jev-chat/jev-chat-jarvis" target="_blank" rel="noopener">github.com/jev-chat/jev-chat-jarvis</a></li>
+    </ul>
+
+    <h2 class="reveal" id="control">6. 你的控制权</h2>
+    <ul class="reveal">
+      <li><strong>关闭历史记录</strong>：设置页里关掉「记录聊天历史」开关，之后不再新增；已有记录仍在本机，需手动清空。</li>
+      <li><strong>清空知识库与历史</strong>：设置页「清空知识库与历史」一键删除 <code>kb</code> 目录全部内容。</li>
+      <li><strong>更换或自建接口</strong>：判断、回复、视觉三路接口地址、密钥、模型名都可以在设置页单独改成你信任的服务商，甚至自建的 OpenAI 兼容网关。</li>
+      <li><strong>只用手动分析</strong>：关闭自动分析开关后，只有你主动点击才会触发一次判断/生成，不会在后台持续读取。</li>
+      <li><strong>会话白名单</strong>：只对你加入白名单的会话生效，未加入的聊天不会被读取和分析。</li>
+      <li><strong>卸载即清空</strong>：卸载应用会删除本机存储的全部数据（密钥、设置、知识库、历史），没有云端账号或备份需要额外注销。</li>
+    </ul>
+
+    <h2 class="reveal" id="providers">7. 第三方模型服务商</h2>
+    <p class="reveal">你在设置页填写的接口地址决定了聊天内容最终发给谁。常见预设包括 OpenRouter、TypeSafe（直连）、DeepSeek 官方、阿里云百炼（通义千问兼容），你也可以填任意 OpenAI 兼容地址。这些服务商如何存储、使用、是否用于训练由它们自己的政策决定，请在使用前自行阅读对应服务商的隐私政策（见第 2 节链接）。作者不对第三方服务商的数据处理行为负责，也无法替它们做出承诺。</p>
+
+    <h2 class="reveal" id="children">8. 儿童</h2>
+    <p class="reveal">本项目面向成年人，不面向 13 岁以下儿童，不主动收集年龄信息。如果你判断自己或被监护人不适合使用需要发送聊天内容到第三方接口的工具，请不要安装或使用本应用。</p>
+
+    <h2 class="reveal" id="changes">9. 变更</h2>
+    <p class="reveal">本政策如有修改，会同步更新本文件（GitHub 仓库）与官网 <a href="https://chatjevs.com/privacy.html">chatjevs.com/privacy.html</a> 上的版本；涉及数据处理方式的重大变更，会在对应版本的发布说明（Release Notes / CHANGELOG）中提示。建议以仓库中的最新版本为准。</p>
+
+    <h2 class="reveal" id="contact">10. 联系</h2>
+    <ul class="reveal">
+      <li>GitHub Issues：<a href="https://github.com/jev-chat/jev-chat-jarvis/issues" target="_blank" rel="noopener">github.com/jev-chat/jev-chat-jarvis/issues</a></li>
+      <li>公众号私信（二维码见仓库 README）</li>
+    </ul>
+
+    <hr class="reveal">
+
+    <h2 class="reveal" id="en-summary">English summary</h2>
+    <div class="en-summary reveal">
+      <p>Jev Chat Assistant (Android) reads the chat you are currently viewing on your device and sends that text to a <strong>model endpoint you configure yourself</strong> (default: OpenRouter routing to TypeSafe Jev / DeepSeek; you may switch to TypeSafe direct, DeepSeek official, Alibaba Cloud's Qwen-compatible endpoint, or any OpenAI-compatible URL) so it can judge intent and draft reply candidates.</p>
+      <ul>
+        <li><strong>No servers are operated by the author.</strong> The author cannot receive, store, or see your chat content — it never passes through any author-controlled infrastructure.</li>
+        <li><strong>Chat text goes only to your own configured model endpoint</strong>, along with a relationship description you write, optionally matched knowledge-base notes/contact notes, and optionally recent history for that contact (default 30 messages, 0–100 adjustable, off by default).</li>
+        <li><strong>Screenshots are never uploaded.</strong> When a chat app's accessibility tree lacks readable text (e.g. Feishu), the screen is captured and OCR'd entirely on-device; the image is processed in memory and discarded, never saved or sent anywhere.</li>
+        <li><strong>Local-only storage</strong>: API keys, endpoint settings, knowledge-base notes/contacts, and (if enabled) per-contact chat history live only in the app's private storage on your device. Nothing syncs to the cloud. Uninstalling the app deletes all of it; a one-tap "clear knowledge base &amp; history" option is also available.</li>
+        <li><strong>No ads, no third-party analytics SDKs</strong> (no Google Analytics, Firebase, etc.), no cookies or advertising identifiers.</li>
+        <li>The app never sends messages automatically — you always press send yourself — and it never touches money transfers, red packets, or payments.</li>
+        <li>The project is open source; every claim above can be verified against the source at <a href="https://github.com/jev-chat/jev-chat-jarvis" target="_blank" rel="noopener">github.com/jev-chat/jev-chat-jarvis</a>.</li>
+        <li>Third-party model providers you choose to use are governed by their own privacy policies, which you should review separately.</li>
+      </ul>
+      <p>Version 1.0, effective 2026-09-23. Scope: Android app only.</p>
+    </div>
+
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <div class="foot-brand">
+      <a class="brand" href="index.html">
+        <img src="assets/favicon.svg" alt="" width="28" height="28" class="brand-mark">
+        <span class="brand-name">Jev 聊天助手</span>
+      </a>
+      <p class="foot-tag">任何聊天里的对话副驾。读懂对方、三条回复、一键填入。</p>
+    </div>
+
+    <nav class="foot-col" aria-label="产品">
+      <h4>产品</h4>
+      <a data-jev-apk href="#">下载 APK v<span data-jev-version>1.2</span></a>
+      <a href="https://github.com/jev-chat/jev-chat-windows/releases" target="_blank" rel="noopener">Windows 版</a>
+      <a href="https://github.com/jev-chat/jev-chat-jarvis-mac/releases" target="_blank" rel="noopener">macOS 版</a>
+      <a href="index.html#start">快速开始</a>
+      <a href="index.html#platforms">平台支持</a>
+    </nav>
+
+    <nav class="foot-col" aria-label="资源">
+      <h4>资源</h4>
+      <a data-jev-repo href="#" target="_blank" rel="noopener">GitHub</a>
+      <a data-jev-readme href="#" target="_blank" rel="noopener">README</a>
+      <a data-jev-commits href="#" target="_blank" rel="noopener">更新记录</a>
+      <a data-jev-issues href="#" target="_blank" rel="noopener">Issues</a>
+    </nav>
+
+    <nav class="foot-col" aria-label="社区">
+      <h4>社区</h4>
+      <a href="index.html#contact">公众号</a>
+      <a data-jev-readme href="#" target="_blank" rel="noopener">交流群</a>
+    </nav>
+  </div>
+
+  <div class="wrap foot-bottom">
+    <p>© 2026 Jev 聊天助手 · <a href="https://github.com/jev-chat/jev-chat-jarvis/blob/main/LICENSE" target="_blank" rel="noopener">MIT 开源</a> · 可商用，须注明出处（<a href="https://github.com/jev-chat/jev-chat-jarvis/blob/main/NOTICE" target="_blank" rel="noopener">NOTICE</a>） · <a href="privacy.html">隐私政策</a></p>
+    <p class="disclaimer">仅供个人学习与研究使用，只处理你自己设备上、你自己有权查看的聊天，请遵守各软件许可协议与当地法律法规。</p>
+  </div>
+</footer>
+
+<script src="main.js?v=20260923a"></script>
+</body>
+</html>
