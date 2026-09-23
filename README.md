@@ -112,7 +112,8 @@ adb install -r apk/jev-assistant-v1.4-release.apk
 
 - 判断 / 回复 / 视觉三路的地址、密钥、模型分别可填。
 - 判断接口新增内置预设「博查 Jev」，1.4 起排在选项最前（博查 Jev / OpenRouter / TypeSafe 直连 / 自定义），选中后自动填好服务地址 `https://jev.bocha.cn` 与模型 `bocha-jev-v1`（协议与 TypeSafe 一致），页面上会显示官方地址并支持一键复制，当前限时免费。全新安装默认使用博查 Jev；已经配置过判断接口的老用户不受影响，provider 和密钥都不会被改动。
-- 内置 OpenRouter、TypeSafe 直连、DeepSeek 官方、通义兼容四套预设，每张卡一键连通测试。
+- 判断接口另有「Vercel」预设：地址 `https://ai-gateway.vercel.sh/typesafe`，模型 `typesafe-ai/jev`，密钥用 [Vercel AI Gateway](https://vercel.com/ai-gateway/models/jev) 的 key。协议与 TypeSafe 直连相同（`POST /v1/systemone`）。
+- 内置 OpenRouter、TypeSafe 直连、Vercel、DeepSeek 官方、通义兼容预设，每张卡一键连通测试。
 - 只有一把密钥也能用：回复、视觉留空自动继承判断接口的配置。
 - 从旧版本升级时，原来那把密钥会一次性迁移到新的三卡结构。
 

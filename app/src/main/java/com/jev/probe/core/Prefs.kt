@@ -70,7 +70,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
 
     // ---------------------------------------------------------------- judge
 
-    /** "bocha" | "openrouter" | "typesafe" | "custom". */
+    /** "bocha" | "openrouter" | "typesafe" | "vercel" | "custom". */
     var judgeProvider: String
         get() = sp.getString(K_JUDGE_PROVIDER, PROVIDER_OPENROUTER) ?: PROVIDER_OPENROUTER
         set(v) = sp.edit().putString(K_JUDGE_PROVIDER, v.trim()).apply()
@@ -227,6 +227,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         return when (judgeProvider) {
             PROVIDER_BOCHA -> "$base/v1/systemone"    // same path as TypeSafe
             PROVIDER_TYPESAFE -> "$base/v1/systemone"
+            PROVIDER_VERCEL -> "$base/v1/systemone"   // TypeSafe-compatible gateway
             PROVIDER_CUSTOM -> judgeBaseUrl.trim()   // user supplies the full URL
             else -> "$base/alpha/decisions"
         }
@@ -288,6 +289,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val PROVIDER_BOCHA = "bocha"
         const val PROVIDER_OPENROUTER = "openrouter"
         const val PROVIDER_TYPESAFE = "typesafe"
+        const val PROVIDER_VERCEL = "vercel"
         const val PROVIDER_CUSTOM = "custom"
 
         const val OCR_MLKIT = "mlkit"
@@ -301,6 +303,10 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val DEFAULT_JUDGE_MODEL_OPENROUTER = "typesafe/jev-1.13"
         const val DEFAULT_JUDGE_BASE_TYPESAFE = "https://api.typesafe.ai"
         const val DEFAULT_JUDGE_MODEL_TYPESAFE = "jev-latest"
+        // Vercel AI Gateway's TypeSafe-compatible API. Same /v1/systemone body
+        // and noul answers as TypeSafe direct; model id is the gateway's.
+        const val DEFAULT_JUDGE_BASE_VERCEL = "https://ai-gateway.vercel.sh/typesafe"
+        const val DEFAULT_JUDGE_MODEL_VERCEL = "typesafe-ai/jev"
 
         // Reply route presets (OpenAI-compatible chat completions).
         const val DEFAULT_REPLY_BASE = "https://openrouter.ai/api/v1"
