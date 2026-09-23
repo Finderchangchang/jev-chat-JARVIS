@@ -77,39 +77,17 @@ class SettingsActivity : AppCompatActivity() {
         val judgeBaseEdit = edit(prefs.judgeBaseUrl, Prefs.DEFAULT_JUDGE_BASE_OPENROUTER)
         val judgeModelEdit = edit(prefs.judgeModel, Prefs.DEFAULT_JUDGE_MODEL_OPENROUTER)
         judgeProviderIdx = when (prefs.judgeProvider) {
-            Prefs.PROVIDER_BOCHA -> 0
-            Prefs.PROVIDER_OPENROUTER -> 1
+            Prefs.PROVIDER_OPENROUTER -> 0
+            Prefs.PROVIDER_BOCHA -> 1
             Prefs.PROVIDER_TYPESAFE -> 2
             Prefs.PROVIDER_CUSTOM -> 3
             else -> 0
         }
-        judgeCard.addView(pills(
-            listOf("博查 Jev", "OpenRouter", "TypeSafe 直连", "自定义"), judgeProviderIdx) { idx ->
-            judgeProviderIdx = idx
-            when (idx) {
-                0 -> {
-                    judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_BOCHA)
-                    judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_BOCHA)
-                }
-                1 -> {
-                    judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_OPENROUTER)
-                    judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_OPENROUTER)
-                }
-                2 -> {
-                    judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_TYPESAFE)
-                    judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_TYPESAFE)
-                }
-                // Custom POSTs the box verbatim, so a preset HOST left in the box
-                // would hit the API root. Expand it into the full endpoint the
-                // preset would have used; anything hand-typed is left alone.
-                3 -> judgeBaseEdit.setText(expandJudgeUrl(judgeBaseEdit.text.toString()))
-            }
-        })
-        judgeCard.addView(label("Base URL"))
-        judgeCard.addView(judgeBaseEdit)
-        judgeCard.addView(text("博查 Jev / TypeSafe 拼 /v1/systemone；OpenRouter 拼 /alpha/decisions；自定义按原样 POST。",
-            11f, sub))
-        // Bocha official address + one-tap copy (limited-time free).
+        // Bocha promo block — official address + one-tap copy (limited-time free).
+        // Shown ONLY when Bocha Jev is the selected provider; picking any other
+        // provider hides it. It used to be added unconditionally, which made every
+        // tab look like it was still showing Bocha.
+        val bochaBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val bochaRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -130,8 +108,38 @@ class SettingsActivity : AppCompatActivity() {
                 Toast.makeText(this@SettingsActivity, "已复制", Toast.LENGTH_SHORT).show()
             }
         })
-        judgeCard.addView(bochaRow)
-        judgeCard.addView(text("去 jev.bocha.cn 领取限时免费 API Key", 11f, sub))
+        bochaBox.addView(bochaRow)
+        bochaBox.addView(text("去 jev.bocha.cn 领取限时免费 API Key", 11f, sub))
+        bochaBox.visibility = if (judgeProviderIdx == 1) View.VISIBLE else View.GONE
+
+        judgeCard.addView(pills(
+            listOf("OpenRouter", "博查 Jev", "TypeSafe 直连", "自定义"), judgeProviderIdx) { idx ->
+            judgeProviderIdx = idx
+            when (idx) {
+                0 -> {
+                    judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_OPENROUTER)
+                    judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_OPENROUTER)
+                }
+                1 -> {
+                    judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_BOCHA)
+                    judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_BOCHA)
+                }
+                2 -> {
+                    judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_TYPESAFE)
+                    judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_TYPESAFE)
+                }
+                // Custom POSTs the box verbatim, so a preset HOST left in the box
+                // would hit the API root. Expand it into the full endpoint the
+                // preset would have used; anything hand-typed is left alone.
+                3 -> judgeBaseEdit.setText(expandJudgeUrl(judgeBaseEdit.text.toString()))
+            }
+            bochaBox.visibility = if (idx == 1) View.VISIBLE else View.GONE
+        })
+        judgeCard.addView(label("Base URL"))
+        judgeCard.addView(judgeBaseEdit)
+        judgeCard.addView(text("OpenRouter 拼 /alpha/decisions；博查 Jev / TypeSafe 拼 /v1/systemone；自定义按原样 POST。",
+            11f, sub))
+        judgeCard.addView(bochaBox)
         judgeCard.addView(label("密钥"))
         judgeCard.addView(edit(prefs.judgeKey, "sk-...", password = true).also { judgeKeyEdit = it })
         judgeCard.addView(label("模型"))
@@ -435,7 +443,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var visionKeyEdit: EditText
 
     private fun providerOf(idx: Int) = when (idx) {
-        0 -> Prefs.PROVIDER_BOCHA
+        1 -> Prefs.PROVIDER_BOCHA
         2 -> Prefs.PROVIDER_TYPESAFE
         3 -> Prefs.PROVIDER_CUSTOM
         else -> Prefs.PROVIDER_OPENROUTER
