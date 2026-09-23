@@ -20,7 +20,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
      * throwaway instances behind the settings test buttons and the KB self-check
      * have nothing to carry over, and used to print one migration line per tap.
      */
-    init { if (prefsName == PREFS_MAIN) migrateIfNeeded() }
+    init { if (prefsName == PREFS_MAIN) { migrateIfNeeded(); seedDefaultsIfFresh() } }
 
     /**
      * v1.2 -> v1.3: the single `openrouter_key` becomes the judge route's key.
@@ -40,9 +40,30 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         e.apply()
     }
 
+    /**
+     * Fresh install only: default the judge route to Bocha Jev (limited-time free).
+     * Runs ONLY when there is no judge config whatsoever — the provider key was
+     * never written AND both the current judge key and the legacy OpenRouter key
+     * are blank. Any existing or migrated user is left completely untouched, so an
+     * OpenRouter key can never be redirected to jev.bocha.cn. The [judgeProvider]
+     * getter default stays OpenRouter on purpose; this only seeds a truly new sp.
+     */
+    private fun seedDefaultsIfFresh() {
+        if (sp.contains(K_JUDGE_PROVIDER)) return
+        val judgeK = sp.getString(K_JUDGE_KEY, "") ?: ""
+        val legacyK = sp.getString(K_LEGACY_KEY, "") ?: ""
+        if (judgeK.isNotBlank() || legacyK.isNotBlank()) return
+        sp.edit()
+            .putString(K_JUDGE_PROVIDER, PROVIDER_BOCHA)
+            .putString(K_JUDGE_BASE, DEFAULT_JUDGE_BASE_BOCHA)
+            .putString(K_JUDGE_MODEL, DEFAULT_JUDGE_MODEL_BOCHA)
+            .apply()
+        Log.i(TAG, "prefs seeded bocha defaults (fresh install)")
+    }
+
     // ---------------------------------------------------------------- judge
 
-    /** "openrouter" | "typesafe" | "custom". */
+    /** "bocha" | "openrouter" | "typesafe" | "custom". */
     var judgeProvider: String
         get() = sp.getString(K_JUDGE_PROVIDER, PROVIDER_OPENROUTER) ?: PROVIDER_OPENROUTER
         set(v) = sp.edit().putString(K_JUDGE_PROVIDER, v.trim()).apply()
@@ -197,6 +218,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
     fun judgeEndpoint(): String {
         val base = judgeBaseUrl.trim().trimEnd('/')
         return when (judgeProvider) {
+            PROVIDER_BOCHA -> "$base/v1/systemone"    // same path as TypeSafe
             PROVIDER_TYPESAFE -> "$base/v1/systemone"
             PROVIDER_CUSTOM -> judgeBaseUrl.trim()   // user supplies the full URL
             else -> "$base/alpha/decisions"
@@ -255,6 +277,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         private const val K_BUBBLE_X = "bubble_x"
         private const val K_AUTO = "auto_analyze"
 
+        const val PROVIDER_BOCHA = "bocha"
         const val PROVIDER_OPENROUTER = "openrouter"
         const val PROVIDER_TYPESAFE = "typesafe"
         const val PROVIDER_CUSTOM = "custom"
@@ -263,6 +286,9 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val OCR_VISION = "vision"
 
         // Judge route presets.
+        // Bocha Jev: same protocol/path as TypeSafe (/v1/systemone). Limited-time free.
+        const val DEFAULT_JUDGE_BASE_BOCHA = "https://jev.bocha.cn"
+        const val DEFAULT_JUDGE_MODEL_BOCHA = "bocha-jev-v1"
         const val DEFAULT_JUDGE_BASE_OPENROUTER = "https://openrouter.ai/api"
         const val DEFAULT_JUDGE_MODEL_OPENROUTER = "typesafe/jev-1.13"
         const val DEFAULT_JUDGE_BASE_TYPESAFE = "https://api.typesafe.ai"
