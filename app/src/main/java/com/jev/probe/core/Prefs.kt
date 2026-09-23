@@ -20,7 +20,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
      * throwaway instances behind the settings test buttons and the KB self-check
      * have nothing to carry over, and used to print one migration line per tap.
      */
-    init { if (prefsName == PREFS_MAIN) { migrateIfNeeded(); seedDefaultsIfFresh() } }
+    init { if (prefsName == PREFS_MAIN) { migrateIfNeeded(); unseedBochaDefaultIfUnconfigured() } }
 
     /**
      * v1.2 -> v1.3: the single `openrouter_key` becomes the judge route's key.
@@ -48,17 +48,24 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
      * OpenRouter key can never be redirected to jev.bocha.cn. The [judgeProvider]
      * getter default stays OpenRouter on purpose; this only seeds a truly new sp.
      */
-    private fun seedDefaultsIfFresh() {
-        if (sp.contains(K_JUDGE_PROVIDER)) return
-        val judgeK = sp.getString(K_JUDGE_KEY, "") ?: ""
-        val legacyK = sp.getString(K_LEGACY_KEY, "") ?: ""
-        if (judgeK.isNotBlank() || legacyK.isNotBlank()) return
-        sp.edit()
-            .putString(K_JUDGE_PROVIDER, PROVIDER_BOCHA)
-            .putString(K_JUDGE_BASE, DEFAULT_JUDGE_BASE_BOCHA)
-            .putString(K_JUDGE_MODEL, DEFAULT_JUDGE_MODEL_BOCHA)
-            .apply()
-        Log.i(TAG, "prefs seeded bocha defaults (fresh install)")
+    /**
+     * v1.4.0 seeded fresh installs to Bocha Jev; v1.4.1 restores OpenRouter as the
+     * default (Bocha stays available, now second in the list). Undo that earlier
+     * auto-seed exactly once, and only when the user never entered a key and never
+     * picked a provider by hand — a saved key, or any non-Bocha provider, means a
+     * real choice we must not touch. Fresh installs now get no seed at all: the
+     * getters already default to OpenRouter.
+     */
+    private fun unseedBochaDefaultIfUnconfigured() {
+        if (sp.getBoolean(K_UNSEEDED_BOCHA, false)) return
+        val e = sp.edit().putBoolean(K_UNSEEDED_BOCHA, true)
+        val prov = sp.getString(K_JUDGE_PROVIDER, null)
+        val key = sp.getString(K_JUDGE_KEY, "") ?: ""
+        if (prov == PROVIDER_BOCHA && key.isBlank()) {
+            e.remove(K_JUDGE_PROVIDER).remove(K_JUDGE_BASE).remove(K_JUDGE_MODEL)
+            Log.i(TAG, "prefs: reverted auto-seeded bocha default to openrouter")
+        }
+        e.apply()
     }
 
     // ---------------------------------------------------------------- judge
@@ -252,6 +259,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
 
         private const val K_LEGACY_KEY = "openrouter_key"
         private const val K_MIGRATED_V13 = "prefs_migrated_v13"
+        private const val K_UNSEEDED_BOCHA = "unseeded_bocha_v141"
         private const val K_JUDGE_PROVIDER = "judge_provider"
         private const val K_JUDGE_BASE = "judge_base_url"
         private const val K_JUDGE_KEY = "judge_key"

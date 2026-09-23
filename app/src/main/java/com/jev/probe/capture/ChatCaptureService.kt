@@ -262,7 +262,10 @@ open class ChatCaptureService : AccessibilityService() {
     private fun showWeChatDisabled(auto: Boolean) {
         if (auto && wechatNoticeShown) return
         wechatNoticeShown = true
-        main.post { overlay?.showNotice(WECHAT_DISABLED_MSG) }
+        // No popup panel in WeChat — a full card is intrusive when others can see
+        // the screen. Take the overlay off WeChat entirely and show the reason
+        // once as a small transient toast.
+        main.post { overlay?.hide(); overlay?.toast(WECHAT_DISABLED_MSG) }
     }
 
     /** A placeholder title an app shows only for a moment (e.g. X's "连接中…"
