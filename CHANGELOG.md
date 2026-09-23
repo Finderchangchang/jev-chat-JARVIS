@@ -2,6 +2,11 @@
 
 格式：每版按 新增 / 改进 / 修复 / 已知限制 / 下载 归类，人话版，不是提交列表。
 
+## 未发布
+
+**新增**
+- 判断接口新增「Vercel」预设。选中后自动填好地址 `https://ai-gateway.vercel.sh/typesafe` 和模型 `typesafe-ai/jev`，密钥用 Vercel AI Gateway 的 key。走的是网关的 TypeSafe 兼容接口 `POST /v1/systemone`，和 TypeSafe 直连同一套请求体与 `noul` 答案，默认仍是 OpenRouter。
+
 ## v1.4 — 2026-09-23
 
 **新增**
