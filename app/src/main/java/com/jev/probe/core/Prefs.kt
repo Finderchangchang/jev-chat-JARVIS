@@ -86,8 +86,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
 
     /**
      * Blank = the OpenRouter vision default. Deliberately does NOT follow
-     * [replyBaseUrl]: a reply host like DeepSeek has no vision endpoint, so
-     * inheriting it would silently break OCR.
+     * [replyBaseUrl]: vision is configured independently from text generation.
      */
     var visionBaseUrl: String
         get() = sp.getString(K_VISION_BASE, DEFAULT_VISION_BASE) ?: DEFAULT_VISION_BASE
@@ -198,6 +197,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         val base = judgeBaseUrl.trim().trimEnd('/')
         return when (judgeProvider) {
             PROVIDER_TYPESAFE -> "$base/v1/systemone"
+            PROVIDER_DEEPSEEK -> "$base/chat/completions"
             PROVIDER_CUSTOM -> judgeBaseUrl.trim()   // user supplies the full URL
             else -> "$base/alpha/decisions"
         }
@@ -257,6 +257,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
 
         const val PROVIDER_OPENROUTER = "openrouter"
         const val PROVIDER_TYPESAFE = "typesafe"
+        const val PROVIDER_DEEPSEEK = "deepseek"
         const val PROVIDER_CUSTOM = "custom"
 
         const val OCR_MLKIT = "mlkit"
@@ -267,12 +268,14 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val DEFAULT_JUDGE_MODEL_OPENROUTER = "typesafe/jev-1.13"
         const val DEFAULT_JUDGE_BASE_TYPESAFE = "https://api.typesafe.ai"
         const val DEFAULT_JUDGE_MODEL_TYPESAFE = "jev-latest"
+        const val DEFAULT_JUDGE_BASE_DEEPSEEK = "https://api.deepseek.com"
+        const val DEFAULT_JUDGE_MODEL_DEEPSEEK = "deepseek-flash"
 
         // Reply route presets (OpenAI-compatible chat completions).
         const val DEFAULT_REPLY_BASE = "https://openrouter.ai/api/v1"
         const val DEFAULT_REPLY_MODEL = "deepseek/deepseek-chat-v3.1"
-        const val DEEPSEEK_BASE = "https://api.deepseek.com/v1"
-        const val DEEPSEEK_MODEL = "deepseek-chat"
+        const val DEEPSEEK_BASE = "https://api.deepseek.com"
+        const val DEEPSEEK_MODEL = "deepseek-flash"
         const val DASHSCOPE_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
         const val DASHSCOPE_MODEL = "qwen-plus"
 
@@ -280,6 +283,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val DEFAULT_VISION_BASE = "https://openrouter.ai/api/v1"
         const val DEFAULT_VISION_MODEL = "qwen/qwen2.5-vl-72b-instruct"
         const val DASHSCOPE_VISION_MODEL = "qwen-vl-max"
+        const val DEEPSEEK_VISION_MODEL = "deepseek-flash"
 
         const val DEFAULT_REL = "对方是我的伴侣；from=me 的是我发的，from=other 的是对方发的"
     }
