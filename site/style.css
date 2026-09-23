@@ -520,3 +520,28 @@ html[data-theme="dark"] .btn-star .star-count { background: rgba(0,0,0,.1); }
 .nav-star:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .nav-star b { font-weight: 700; }
 @media (max-width: 720px) { .nav-star-text { display: none; } .nav-star { padding: 0 10px; } }
+
+/* ---------- policy (privacy page prose, 2026-09-23) ---------- */
+.policy { padding: 56px 0 40px; }
+.policy .lead { font-size: 18px; color: var(--ink); margin-bottom: 10px; }
+.policy .meta { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+.policy h2 { font-size: 23px; line-height: 30px; font-weight: 500; letter-spacing: -.4px; margin: 44px 0 16px; scroll-margin-top: 96px; }
+.policy h2:first-of-type { margin-top: 0; }
+.policy p { color: var(--muted); font-size: 15.5px; margin-bottom: 14px; }
+.policy p:last-child { margin-bottom: 0; }
+.policy ul { margin: 0 0 16px; display: flex; flex-direction: column; gap: 9px; }
+.policy li { position: relative; padding-left: 18px; color: var(--muted); font-size: 15.5px; line-height: 1.6; }
+.policy li::before { content: ""; position: absolute; left: 3px; top: 9px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex: none; }
+.policy hr { border: none; border-top: 1px solid var(--line-soft); margin: 40px 0; }
+.policy strong { color: var(--ink); font-weight: 600; }
+.policy code { font-family: var(--mono); font-size: 13.5px; background: var(--surface-soft); border: 1px solid var(--line-soft); border-radius: 5px; padding: 1px 6px; }
+.policy a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-soft); text-underline-offset: 3px; }
+.policy a:hover { text-decoration-color: var(--accent); }
+.policy .en-summary p, .policy .en-summary li { font-size: 14.5px; }
+
+.legal { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14.5px; }
+.legal th, .legal td { padding: 13px 16px; text-align: left; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+.legal thead th { font-weight: 500; font-size: 13.5px; color: var(--muted); background: var(--surface-soft); white-space: nowrap; }
+.legal tbody tr:last-child th, .legal tbody tr:last-child td { border-bottom: 0; }
+.legal tbody th { font-weight: 500; color: var(--ink); }
+.legal td { color: var(--muted); }

@@ -342,6 +342,17 @@ class SettingsActivity : AppCompatActivity() {
         card3.addView(seek)
         root.addView(card3)
 
+        // =================== 关于与隐私 ===================
+        root.addView(section("关于与隐私"))
+        val aboutCard = card()
+        aboutCard.addView(text(
+            "这个 App 会读取你当前聊天窗口的文字，发给你自己配置的模型接口做判断和起草回复。作者不运营服务器，收不到你的数据。",
+            12f, sub))
+        aboutCard.addView(cardBtn("隐私政策") { openUrl(PRIVACY_URL) })
+        aboutCard.addView(cardBtn("开源仓库") { openUrl(REPO_URL) })
+        aboutCard.addView(text(versionLabel(), 11f, sub).apply { setPadding(0, dp(10), 0, dp(2)) })
+        root.addView(aboutCard)
+
         // =================== 保存 ===================
         root.addView(primaryBtn("保存全部设置") {
             // Address wins over the pill: a preset HOST in the box means that
@@ -438,6 +449,25 @@ class SettingsActivity : AppCompatActivity() {
     private fun draftPrefs(scratchName: String, fill: Prefs.() -> Unit): Prefs {
         getSharedPreferences(scratchName, MODE_PRIVATE).edit().clear().commit()
         return Prefs(this, scratchName).apply(fill)
+    }
+
+    /** Opens an external link; swallows the failure with a toast rather than crashing. */
+    private fun openUrl(url: String) {
+        runCatching {
+            startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.onFailure {
+            Toast.makeText(this, "打不开浏览器", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun versionLabel(): String = try {
+        val pi = packageManager.getPackageInfo(packageName, 0)
+        "版本 v${pi.versionName}（${pi.longVersionCode}）"
+    } catch (e: Exception) {
+        "版本 —"
     }
 
     /** 1x1 white JPEG for the vision smoke test, via the real encoder path. */
@@ -581,5 +611,7 @@ class SettingsActivity : AppCompatActivity() {
         private const val SCRATCH_REPLY = "jev_probe_scratch_reply"
         private const val SCRATCH_VISION = "jev_probe_scratch_vision"
 
+        private const val PRIVACY_URL = "https://chatjevs.com/privacy.html"
+        private const val REPO_URL = "https://github.com/jev-chat/jev-chat-jarvis"
     }
 }

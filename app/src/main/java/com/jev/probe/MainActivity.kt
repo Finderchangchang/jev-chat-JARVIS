@@ -14,6 +14,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.jev.probe.core.Prefs
 import kotlin.math.roundToInt
@@ -73,6 +74,7 @@ class MainActivity : AppCompatActivity() {
 
         // Readiness card
         container.addView(statusCard(ready, a11y, overlay, key))
+        container.addView(privacyHint())
 
         // Permission checklist
         container.addView(sectionLabel("权限设置"))
@@ -123,6 +125,21 @@ class MainActivity : AppCompatActivity() {
             })
         }
         return c
+    }
+
+    /** One tappable line under the readiness card, opening the privacy policy page. */
+    private fun privacyHint(): View = text("读取的聊天内容只发往你自己配置的接口 · 隐私政策", 11f, sub).apply {
+        setPadding(dp(2), dp(8), 0, 0)
+        setOnClickListener { openUrl(PRIVACY_URL) }
+    }
+
+    /** Opens an external link; swallows the failure with a toast rather than crashing. */
+    private fun openUrl(url: String) {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure {
+            Toast.makeText(this, "打不开浏览器", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun checkLine(label: String, ok: Boolean, okWord: String = "已开", noWord: String = "未开"): View {
@@ -224,5 +241,9 @@ class MainActivity : AppCompatActivity() {
         val enabled = Settings.Secure.getString(contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
         return enabled.contains(a11yComponent)
+    }
+
+    companion object {
+        private const val PRIVACY_URL = "https://chatjevs.com/privacy.html"
     }
 }
