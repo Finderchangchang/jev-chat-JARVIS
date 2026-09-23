@@ -6,6 +6,8 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
@@ -15,6 +17,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.jev.probe.core.CaptureHealth
 import com.jev.probe.core.Prefs
 import kotlin.math.roundToInt
 
@@ -27,8 +30,17 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
     private lateinit var container: LinearLayout
-    private val a11yComponent =
-        "com.jev.probe/com.google.android.accessibility.selecttospeak.SelectToSpeakService"
+    private val a11yComponent get() =
+        "$packageName/com.google.android.accessibility.selecttospeak.SelectToSpeakService"
+    private val healthHandler = Handler(Looper.getMainLooper())
+    private var lastHealth = ""
+    private val refreshHealth = object : Runnable {
+        override fun run() {
+            val health = "${CaptureHealth.state(isA11yEnabled())}:${CaptureHealth.keepAliveFailure}"
+            if (health != lastHealth) { lastHealth = health; build() }
+            healthHandler.postDelayed(this, 1000)
+        }
+    }
 
     private val accent = Color.parseColor("#3A7AFE")
     private val green = Color.parseColor("#16A34A")
@@ -57,6 +69,12 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         build()
+        healthHandler.post(refreshHealth)
+    }
+
+    override fun onPause() {
+        healthHandler.removeCallbacks(refreshHealth)
+        super.onPause()
     }
 
     private fun build() {
@@ -69,20 +87,23 @@ class MainActivity : AppCompatActivity() {
         val a11y = isA11yEnabled()
         val overlay = Settings.canDrawOverlays(this)
         val key = prefs.hasKey()   // judge route key: the one analysis cannot run without
-        val ready = a11y && overlay && key
+        val ready = CaptureHealth.state(a11y) == CaptureHealth.State.CONNECTED && overlay && key && prefs.enabled
 
         // Readiness card
         container.addView(statusCard(ready, a11y, overlay, key))
 
         // Permission checklist
         container.addView(sectionLabel("权限设置"))
-        container.addView(permCard("无障碍权限", "读取当前聊天窗口的消息文字", a11y) {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        })
+        val connected = CaptureHealth.state(a11y) == CaptureHealth.State.CONNECTED
+        container.addView(actionRow(
+            if (!a11y) "开启无障碍服务" else if (!connected) "恢复读屏服务" else "无障碍服务设置",
+            if (a11y && !connected) "已授权，但读屏服务未连接。请关闭 Jev 无障碍开关再开启，返回后自动检查。"
+            else "读取当前聊天窗口的消息文字"
+        ) { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) })
         container.addView(permCard("悬浮窗权限", "在聊天窗口上方显示分析卡片", overlay) {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         })
-        container.addView(permCard("自启动 + 省电无限制", "小米/HyperOS 必做，否则服务被冻结、读不到消息", null) {
+        container.addView(permCard("自启动 + 省电无限制", "vivo / 小米等机型请允许自启动和后台运行，降低被系统清理的概率", null) {
             runCatching {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
             }
@@ -111,9 +132,22 @@ class MainActivity : AppCompatActivity() {
         head.addView(dot(if (ready) green else red).apply {
             (layoutParams as LinearLayout.LayoutParams).rightMargin = dp(10)
         })
-        head.addView(text(if (ready) "已就绪，可以用了" else "尚未就绪", 16f, if (ready) green else ink, bold = true))
+        val headline = when {
+            !prefs.enabled -> "助手已暂停"
+            a11y && CaptureHealth.state(a11y) != CaptureHealth.State.CONNECTED -> "读屏服务未连接"
+            ready -> "已就绪，可以用了"
+            else -> "尚未就绪"
+        }
+        head.addView(text(headline, 16f, if (ready) green else ink, bold = true))
         c.addView(head)
-        c.addView(checkLine("无障碍", a11y))
+        val state = CaptureHealth.state(a11y)
+        c.addView(checkLine("无障碍授权：", a11y, "已开启", "未开启"))
+        c.addView(checkLine("读屏服务：", state == CaptureHealth.State.CONNECTED, "已连接",
+            if (a11y) "未连接，可能已停止或正在连接" else "等待授权"))
+        if (!prefs.enabled) c.addView(text("助手已暂停，请使用下方开关开启", 12f, sub))
+        CaptureHealth.keepAliveFailure?.let {
+            c.addView(text("后台保活启动失败（$it），请检查自启动和后台耗电限制。读屏服务可能被系统清理。", 12f, red))
+        }
         c.addView(checkLine("悬浮窗", overlay))
         c.addView(checkLine("密钥", key, okWord = "已设", noWord = "未设"))
         // History recording is opt-in (off by default). Mention it here, never block on it.
@@ -223,6 +257,6 @@ class MainActivity : AppCompatActivity() {
     private fun isA11yEnabled(): Boolean {
         val enabled = Settings.Secure.getString(contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
-        return enabled.contains(a11yComponent)
+        return enabled.split(':').any { android.content.ComponentName.unflattenFromString(it)?.flattenToString() == a11yComponent }
     }
 }

@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
+import com.jev.probe.core.CaptureHealth
 
 /**
  * A minimal foreground service whose only job is to keep the app process at
@@ -33,7 +35,14 @@ class KeepAliveService : Service() {
             .setSmallIcon(android.R.drawable.ic_menu_edit)
             .setOngoing(true)
             .build()
-        startForeground(1, notif)
+        try {
+            startForeground(1, notif)
+            CaptureHealth.keepAliveStarted()
+        } catch (e: RuntimeException) {
+            CaptureHealth.keepAliveFailed(e.javaClass.simpleName)
+            Log.w("JEVASSIST", "keep-alive foreground failed: ${e.javaClass.simpleName}")
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY

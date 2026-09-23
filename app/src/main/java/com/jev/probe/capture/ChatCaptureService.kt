@@ -15,6 +15,7 @@ import com.jev.probe.capture.ocr.ScreenCapture
 import com.jev.probe.core.BubbleRect
 import com.jev.probe.core.ChatSnapshot
 import com.jev.probe.core.Msg
+import com.jev.probe.core.CaptureHealth
 import com.jev.probe.core.Prefs
 import com.jev.probe.core.kb.ContextBuilder
 import com.jev.probe.core.kb.KbStore
@@ -108,7 +109,11 @@ open class ChatCaptureService : AccessibilityService() {
         // Bubble menu: one manual screenshot + OCR, for any app at all.
         overlay?.onOcrCapture = { ocrCaptureManual() }
         // Keep the process at foreground importance so MIUI does not freeze us.
-        runCatching { KeepAliveService.start(this) }
+        CaptureHealth.connected(this)
+        runCatching { KeepAliveService.start(this) }.onFailure {
+            CaptureHealth.keepAliveFailed(it.javaClass.simpleName)
+            Log.w(TAG, "keep-alive start failed: ${it.javaClass.simpleName}")
+        }
         // Load the bundled OCR model now, off the main thread: the first
         // recognize() otherwise pays for it inside the screenshot callback.
         submit { MlKitOcr.warmUp() }
@@ -555,7 +560,14 @@ open class ChatCaptureService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
+    override fun onUnbind(intent: android.content.Intent?): Boolean {
+        CaptureHealth.disconnected(this)
+        return super.onUnbind(intent)
+    }
+
     override fun onDestroy() {
+        CaptureHealth.disconnected(this)
+        main.removeCallbacksAndMessages(null)
         super.onDestroy()
         // Tear the overlay down and cut its callback so a stale button tap can
         // never call back into this dead instance.
