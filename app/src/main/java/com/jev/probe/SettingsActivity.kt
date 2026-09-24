@@ -80,7 +80,8 @@ class SettingsActivity : AppCompatActivity() {
             Prefs.PROVIDER_OPENROUTER -> 0
             Prefs.PROVIDER_BOCHA -> 1
             Prefs.PROVIDER_TYPESAFE -> 2
-            Prefs.PROVIDER_CUSTOM -> 3
+            Prefs.PROVIDER_VERCEL -> 3
+            Prefs.PROVIDER_CUSTOM -> 4
             else -> 0
         }
         // Bocha promo block — official address + one-tap copy (limited-time free).
@@ -113,7 +114,7 @@ class SettingsActivity : AppCompatActivity() {
         bochaBox.visibility = if (judgeProviderIdx == 1) View.VISIBLE else View.GONE
 
         judgeCard.addView(pills(
-            listOf("OpenRouter", "博查 Jev", "TypeSafe 直连", "自定义"), judgeProviderIdx) { idx ->
+            listOf("OpenRouter", "博查 Jev", "TypeSafe 直连", "Vercel", "自定义"), judgeProviderIdx) { idx ->
             judgeProviderIdx = idx
             when (idx) {
                 0 -> {
@@ -128,16 +129,20 @@ class SettingsActivity : AppCompatActivity() {
                     judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_TYPESAFE)
                     judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_TYPESAFE)
                 }
+                3 -> {
+                    judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_VERCEL)
+                    judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_VERCEL)
+                }
                 // Custom POSTs the box verbatim, so a preset HOST left in the box
                 // would hit the API root. Expand it into the full endpoint the
                 // preset would have used; anything hand-typed is left alone.
-                3 -> judgeBaseEdit.setText(expandJudgeUrl(judgeBaseEdit.text.toString()))
+                4 -> judgeBaseEdit.setText(expandJudgeUrl(judgeBaseEdit.text.toString()))
             }
             bochaBox.visibility = if (idx == 1) View.VISIBLE else View.GONE
         })
         judgeCard.addView(label("Base URL"))
         judgeCard.addView(judgeBaseEdit)
-        judgeCard.addView(text("OpenRouter 拼 /alpha/decisions；博查 Jev / TypeSafe 拼 /v1/systemone；自定义按原样 POST。",
+        judgeCard.addView(text("OpenRouter 拼 /alpha/decisions；博查 Jev / TypeSafe / Vercel 拼 /v1/systemone；自定义按原样 POST。Vercel 用 AI Gateway 的密钥。",
             11f, sub))
         judgeCard.addView(bochaBox)
         judgeCard.addView(label("密钥"))
@@ -445,7 +450,8 @@ class SettingsActivity : AppCompatActivity() {
     private fun providerOf(idx: Int) = when (idx) {
         1 -> Prefs.PROVIDER_BOCHA
         2 -> Prefs.PROVIDER_TYPESAFE
-        3 -> Prefs.PROVIDER_CUSTOM
+        3 -> Prefs.PROVIDER_VERCEL
+        4 -> Prefs.PROVIDER_CUSTOM
         else -> Prefs.PROVIDER_OPENROUTER
     }
 
@@ -460,6 +466,7 @@ class SettingsActivity : AppCompatActivity() {
             Prefs.DEFAULT_JUDGE_BASE_BOCHA -> Prefs.PROVIDER_BOCHA
             Prefs.DEFAULT_JUDGE_BASE_OPENROUTER -> Prefs.PROVIDER_OPENROUTER
             Prefs.DEFAULT_JUDGE_BASE_TYPESAFE -> Prefs.PROVIDER_TYPESAFE
+            Prefs.DEFAULT_JUDGE_BASE_VERCEL -> Prefs.PROVIDER_VERCEL
             else -> providerOf(idx)
         }
 
@@ -468,18 +475,21 @@ class SettingsActivity : AppCompatActivity() {
         Prefs.DEFAULT_JUDGE_BASE_BOCHA -> Prefs.DEFAULT_JUDGE_BASE_BOCHA + "/v1/systemone"
         Prefs.DEFAULT_JUDGE_BASE_OPENROUTER -> Prefs.DEFAULT_JUDGE_BASE_OPENROUTER + "/alpha/decisions"
         Prefs.DEFAULT_JUDGE_BASE_TYPESAFE -> Prefs.DEFAULT_JUDGE_BASE_TYPESAFE + "/v1/systemone"
+        Prefs.DEFAULT_JUDGE_BASE_VERCEL -> Prefs.DEFAULT_JUDGE_BASE_VERCEL + "/v1/systemone"
         else -> base.trim()
     }
 
     private fun defaultJudgeBase(provider: String): String = when (provider) {
         Prefs.PROVIDER_BOCHA -> Prefs.DEFAULT_JUDGE_BASE_BOCHA
         Prefs.PROVIDER_TYPESAFE -> Prefs.DEFAULT_JUDGE_BASE_TYPESAFE
+        Prefs.PROVIDER_VERCEL -> Prefs.DEFAULT_JUDGE_BASE_VERCEL
         else -> Prefs.DEFAULT_JUDGE_BASE_OPENROUTER
     }
 
     private fun defaultJudgeModel(provider: String): String = when (provider) {
         Prefs.PROVIDER_BOCHA -> Prefs.DEFAULT_JUDGE_MODEL_BOCHA
         Prefs.PROVIDER_TYPESAFE -> Prefs.DEFAULT_JUDGE_MODEL_TYPESAFE
+        Prefs.PROVIDER_VERCEL -> Prefs.DEFAULT_JUDGE_MODEL_VERCEL
         else -> Prefs.DEFAULT_JUDGE_MODEL_OPENROUTER
     }
 
