@@ -257,7 +257,8 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
 
 想听真实需求：你在哪个聊天 App 上最想要这个副驾？希望它判断什么、怎么提示、什么绝对不能碰？公众号私信直接说。
 
-<p align="center"><sub>下面的群码都已满或已过期，暂时扫不进；想进群请公众号私信要新码。</sub></p>
+<details>
+<summary>点击展开交流群二维码（都已满或已过期，进群请公众号私信要新码）</summary>
 
 <table align="center"><tr>
   <td align="center"><img src="docs/images/group-1.png" width="80" alt="1 群" /><br/><sub>1 群</sub></td>
@@ -271,6 +272,8 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
   <td align="center"><img src="docs/images/group-9.png" width="80" alt="9 群" /><br/><sub>9 群</sub></td>
 </tr></table>
 
+</details>
+
 ## 姊妹项目
 
 同在 [jev-chat](https://github.com/jev-chat) 组织下：
@@ -279,6 +282,15 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
 - [Jev 聊天助手 Windows 版](https://github.com/jev-chat/jev-chat-windows)：聊天窗口旁挂的回复辅助，窗口截图 + 本地离线 OCR，3 条候选一键填入，发送永远手动。
 
 隐私政策见 [PRIVACY.md](PRIVACY.md)（说明读取了什么、发给谁、存在哪里、怎么删除）。
+
+## 友情链接
+
+<table>
+<tr>
+<td width="150" align="center"><a href="https://github.com/lanyijianke"><img src="docs/images/friends/lanyijianke.jpg" width="100" alt="蓝衣剑客" /></a><br/><b>蓝衣剑客</b></td>
+<td>资深 AI 专家、作家，火山引擎领航 KOL、阿里云 Agent 创客、WaytoAGI 核心创作者。深耕软件开发、系统架构与项目管理，著有《豆包高效办公》《Kimi 高效办公》等畅销 AI 书籍，获京东图书 2025 年度超级新书、2025 机工创作之星；曾参与多项 AI 领域标准及国家级报告起草，为数十家世界百强企业提供企业级 AI 咨询与实施。<br/><br/>GitHub：<a href="https://github.com/lanyijianke">@lanyijianke</a> · 邮箱：<a href="mailto:lanyijianke@outlook.com">lanyijianke@outlook.com</a></td>
+</tr>
+</table>
 
 ## 版权与许可
 
@@ -290,8 +302,3 @@ Copyright © 2026 Finderchangchang 与 jev-chat 贡献者。代码以 [MIT](LICE
 
 **免责声明**：本项目只处理你自己设备上、你自己有权查看的聊天。请遵守 QQ、X、飞书等各软件的许可协议与当地法律法规，作者不对使用后果负责。
 
-## ☕ 请我喝杯咖啡
-
-如果你觉得我写的这玩意儿对你有点帮助，欢迎请我喝杯咖啡。咖啡因一到位，脑子就开始冒泡，源源不断地驱动我往前跑；哪天我更新得特别勤，说明这杯续上了 😄
-
-<p align="center"><sub>随手支持，不用有压力；不支持也没关系，点个 Star 或提条建议同样能让我开心很久。</sub></p>
