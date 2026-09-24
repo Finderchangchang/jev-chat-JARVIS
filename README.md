@@ -74,7 +74,7 @@
 
 ## 快速开始
 
-**1. 装包。** 仓库里有签好名的 release 包：[`apk/jev-assistant-v1.4-release.apk`](apk/jev-assistant-v1.4-release.apk)（Android 11+）。各版本安装包也在 [Releases](https://github.com/jev-chat/jev-chat-jarvis/releases)。
+**1. 装包。** 仓库里有签好名的 release 包：[`apk/jev-assistant-v1.4-release.apk`](apk/jev-assistant-v1.4-release.apk)（Android 11+，仅支持 ARM64 / `arm64-v8a`）。各版本安装包也在 [Releases](https://github.com/jev-chat/jev-chat-jarvis/releases)。
 
 ```bash
 adb install -r apk/jev-assistant-v1.4-release.apk
