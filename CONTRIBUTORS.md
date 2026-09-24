@@ -17,9 +17,9 @@ Jev 聊天助手是一个三端并行的开源项目，只读屏幕、不注入�
 
 | 平台 | 当前覆盖 |
 |---|---|
-| Android | 微信、QQ、X / Twitter 私信、飞书全链路；任意其它 App 支持截屏识别一次；桌面端与网页在规划中 |
-| macOS | 微信 |
-| Windows | 微信（Windows 4.x） |
+| Android | QQ、X / Twitter 私信、飞书全链路；任意其它 App 支持截屏识别一次；桌面端与网页在规划中 |
+| macOS | 桌面聊天窗口，看屏 + 本地小模型 |
+| Windows | 桌面聊天窗口，窗口截图 + 离线 OCR |
 
 三端共用同一套判断内核，差异在采集方式：Android 走无障碍节点加离线 OCR，macOS 与 Windows 走屏幕录制加 OCR。
 
@@ -49,13 +49,13 @@ Jev 聊天助手是一个三端并行的开源项目，只读屏幕、不注入�
 
 三条项目红线，任何一条被破坏的改动都不会被接受：
 
-1. **纯只读**。不注入微信、不 hook、不解密数据。
+1. **纯只读**。不注入目标 App、不 hook、不解密数据。
 2. **发送永远手动**。程序不替你按发送键，填入只是把候选放进输入框。
 3. **只处理你自己有权查看的聊天**。
 
 贡献流程、认领规则与自测要求写在 macOS 仓库的 [CONTRIBUTING.md](https://github.com/jev-chat/jev-chat-jarvis-mac/blob/master/CONTRIBUTING.md)，同样适用于另外两端：先认领再动手、一个 PR 只做一件事、改哪层跑哪层的自测。
 
-联系与需求反馈走公众号私信，或加入交流群（见各仓库 README）。
+联系与需求反馈请到 [GitHub Issues](https://github.com/jev-chat/jev-chat-jarvis/issues) 提。
 
 ## 许可证
 
