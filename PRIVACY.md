@@ -98,6 +98,7 @@ API 密钥会作为请求头（`Authorization`）随对应请求发给你自己�
 ## 10. 联系
 
 - GitHub Issues：https://github.com/jev-chat/jev-chat-jarvis/issues
+- 公众号私信（二维码见仓库 README）
 
 ---
 

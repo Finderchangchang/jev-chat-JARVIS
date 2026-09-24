@@ -55,7 +55,7 @@ Jev 聊天助手是一个三端并行的开源项目，只读屏幕、不注入�
 
 贡献流程、认领规则与自测要求写在 macOS 仓库的 [CONTRIBUTING.md](https://github.com/jev-chat/jev-chat-jarvis-mac/blob/master/CONTRIBUTING.md)，同样适用于另外两端：先认领再动手、一个 PR 只做一件事、改哪层跑哪层的自测。
 
-联系与需求反馈请到 [GitHub Issues](https://github.com/jev-chat/jev-chat-jarvis/issues) 提。
+联系与需求反馈走公众号私信，或加入交流群（见各仓库 README）。
 
 ## 许可证
 
