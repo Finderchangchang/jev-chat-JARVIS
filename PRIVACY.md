@@ -18,7 +18,7 @@
 
 ## 2. 会离开你设备的数据
 
-只发往一个地方：**你自己在设置页配置的模型接口地址**（默认是 OpenRouter 转发的 TypeSafe Jev / DeepSeek，你可以改成 TypeSafe 直连、Vercel AI Gateway、DeepSeek 官方、通义千问兼容接口，或任意 OpenAI 兼容地址）。作者的服务器不在这条链路上，作者收不到、也看不到这些内容。
+只发往一个地方：**你自己在设置页配置的模型接口地址**（默认是 OpenRouter 转发的 TypeSafe Jev / DeepSeek，你可以改成 TypeSafe 直连、Vercel AI Gateway、OpenCode Zen、DeepSeek 官方、通义千问兼容接口，或任意 OpenAI 兼容地址）。作者的服务器不在这条链路上，作者收不到、也看不到这些内容。
 
 | 接口 | 默认服务商（可自行更换） | 每次发送的内容 | 触发时机 |
 |---|---|---|---|

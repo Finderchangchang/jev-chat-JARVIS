@@ -6,6 +6,7 @@
 
 **新增**
 - 判断接口新增「Vercel」预设。选中后自动填好地址 `https://ai-gateway.vercel.sh/typesafe` 和模型 `typesafe-ai/jev`，密钥用 Vercel AI Gateway 的 key。走的是网关的 TypeSafe 兼容接口 `POST /v1/systemone`，和 TypeSafe 直连同一套请求体与 `noul` 答案，默认仍是 OpenRouter。
+- 判断接口新增「OpenCode Zen」预设。选中后自动填好地址 `https://opencode.ai/zen` 和模型 `jev-1.13`，密钥用 [OpenCode Zen](https://opencode.ai/zen) 的 key。走的是 Zen 的 TypeSafe 兼容接口 `POST /v1/systemone`，同样一套请求体与 `noul` 答案；`jev-1.13` 输出免费（输入 $0.042/M，一次判断约 1000 输入 token，约 $0.00004），也可以手动改成限时免费的 `jev-1.13-free`（功能受限）。
 
 ## v1.4 — 2026-09-23
 
