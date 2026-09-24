@@ -145,7 +145,7 @@
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 4.5c4.4 0 7.8 3.4 9 7.5-1.2 4.1-4.6 7.5-9 7.5S4.2 16.1 3 12c1.2-4.1 4.6-7.5 9-7.5z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.8" fill="currentColor"/></svg>
         </span>
         <h3>判断</h3>
-        <p>TypeSafe Jev 判断模型一次给出：对方真实意图、危险等级 1–9、对方要什么、该不该马上回、最佳动作。约 1 秒，带把握度。</p>
+        <p>Jev 判断模型不写字，只在固定选项里选：真实意图、危险等级（0–9）、对方要什么、该不该马上回、最佳动作等 7 项，都带概率和把握度，约 1 秒出结果。</p>
       </article>
 
       <article class="card reveal">
@@ -153,7 +153,7 @@
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="3.5" y="5" width="17" height="4.4" rx="2.2" fill="currentColor"/><rect x="3.5" y="11" width="13" height="4.4" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="3.5" y="17" width="9" height="3" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
         </span>
         <h3>候选</h3>
-        <p>生成模型（默认 DeepSeek）起草 3 条口语化回复，Jev 按「最合适」重新排序，并给出每条的占比，谁排第一有理由。</p>
+        <p>生成模型起草 3 条候选回复——稳妥接话、给出行动或承诺、简短表态各一条，默认经 OpenRouter 调用 DeepSeek。Jev 再给这 3 条排序，标出概率。</p>
       </article>
 
       <article class="card reveal">
@@ -273,7 +273,7 @@
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H18v16H6.5A1.5 1.5 0 0 1 5 18.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 8.5h6M9 12h6M9 15.5h3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         </span>
         <h3>知识库与关联上下文</h3>
-        <p>本地维护笔记和联系人档案（关系、别名、备注）。分析时自动带上命中的知识和这个人的历史聊天，候选回复与知识库口径一致。联系人可跨 App 关联。</p>
+        <p>本地维护笔记和联系人档案（关系、别名、备注）。笔记分两种：常驻的每次都带，其余按标签或标题匹配当前对话自动命中；开启历史后再带上这个人最近的聊天。回复口径与知识库一致，不编造知识库外的内容。联系人可跨 App 关联。</p>
       </article>
 
       <article class="card reveal">
@@ -289,7 +289,7 @@
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 7.5h14M5 12h14M5 16.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="7.5" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="15" cy="12" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="10" cy="16.5" r="2.1" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
         </span>
         <h3>接口全可配</h3>
-        <p>判断 / 回复 / 视觉三路接口的地址、密钥、模型分别可填。内置 OpenRouter、TypeSafe 直连、Vercel、OpenCode Zen、DeepSeek 官方、通义兼容预设，各自一键连通测试。只填一把 OpenRouter 密钥就能用。</p>
+        <p>判断 / 回复 / 视觉三路接口的地址、密钥、模型分别可填。内置 OpenRouter、博查 Jev、TypeSafe 直连、Vercel、OpenCode Zen、DeepSeek 官方、通义兼容预设，各自一键连通测试。只填一把 OpenRouter 密钥就能用。</p>
       </article>
 
       <article class="card reveal">
@@ -297,7 +297,7 @@
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="15" r="1.5" fill="currentColor"/></svg>
         </span>
         <h3>隐私在本机</h3>
-        <p>密钥只存在 App 私有空间。聊天内容只在分析那一刻发给你配置的模型接口，不落盘、不进日志。历史记录默认关闭，开了也只存本机。</p>
+        <p>密钥只存在 App 私有空间。聊天内容只在判断那一刻发给你自己配置的接口，作者不架设服务器、不经手，也不落盘、不进日志。历史记录默认关闭，开了也只存本机。</p>
       </article>
     </div>
   </div>
@@ -435,7 +435,7 @@
         <div class="flow-pair">
           <div class="flow-half">
             <h4>Jev 判断</h4>
-            <p>意图 · 危险等级 1–9 · 该不该马上回</p>
+            <p>意图 · 危险等级 0–9 · 该不该马上回</p>
           </div>
           <div class="flow-half">
             <h4>生成模型起草</h4>
@@ -447,7 +447,7 @@
       <div class="flow-node">
         <span class="flow-idx">3</span>
         <h4>Jev 排序</h4>
-        <p>按「最合适」重排，给出占比</p>
+        <p>按「最合适」重排，给出概率</p>
       </div>
       <span class="flow-arrow" aria-hidden="true"></span>
       <div class="flow-node">
@@ -487,17 +487,19 @@
       </details>
       <details>
         <summary>要准备什么密钥？<span class="acc-ico" aria-hidden="true"></span></summary>
-        <div class="faq-body"><p>最少一把 OpenRouter API Key 就能跑起来：填在「判断接口」，回复和视觉接口留空会自动继承。也可以三路分开配，内置 OpenRouter、TypeSafe 直连、Vercel、OpenCode Zen、DeepSeek 官方、通义兼容预设，各自一键测连通。Vercel 用 AI Gateway 密钥，OpenCode Zen 用 Zen 密钥，都是 TypeSafe 兼容接口。</p></div>
+        <div class="faq-body"><p>最少一把 OpenRouter API Key 就能跑起来：填在「判断接口」，回复和视觉接口留空会自动继承。也可以三路分开配，内置 OpenRouter、博查 Jev、TypeSafe 直连、Vercel、OpenCode Zen、DeepSeek 官方、通义兼容预设，各自一键测连通。Vercel 用 AI Gateway 密钥，OpenCode Zen 用 Zen 密钥，都是 TypeSafe 兼容接口。</p></div>
       </details>
       <details>
         <summary>我的聊天内容会被上传吗？<span class="acc-ico" aria-hidden="true"></span></summary>
-        <div class="faq-body"><p>只在分析那一刻发给你自己配置的模型接口，之后不落盘、不进日志。密钥只存在 App 私有空间。历史记录默认关闭，开了也只存在本机。OCR 走的是 ML Kit 中文离线识别，图片不上传。</p></div>
+        <div class="faq-body"><p>只在判断那一刻，把屏幕上最近几条消息、你填的关系描述发给你自己配置的接口（开了知识库还会带上命中的笔记和联系人备注，开了历史还会带上这个人最近的聊天），之后不落盘、不进日志，作者不架设服务器、不经手。密钥只存在 App 私有空间。历史记录默认关闭，开了也只存在本机。OCR 走的是 ML Kit 中文离线识别，图片不上传。</p></div>
       </details>
       <details>
         <summary>群聊准吗？还有哪些已知限制？<span class="acc-ico" aria-hidden="true"></span></summary>
         <div class="faq-body">
           <ul>
+            <li>Jev 主要用英文训练，中文场景的判断质量会波动；题目是按亲密关系里的冲突场景校准的，群聊、工作聊天这类场景准确度会下降。</li>
             <li>群聊目前按一对一的方式分析，多人交叉对话时判断会不准。</li>
+            <li>判断给出的是概率，不是确定结论，仅供参考。</li>
             <li>部分国产 ROM 的后台冻结策略可能让悬浮气泡短暂消失，开自启动和省电无限制可缓解。</li>
             <li>X / Twitter 只在中文界面下验证过。</li>
           </ul>
