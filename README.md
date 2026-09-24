@@ -18,7 +18,7 @@
 
 ## ❤️赞助商
 
-> [想出现在这里？](#交流群--需求收集)
+> [想出现在这里？](#联系与反馈)
 
 <details open>
 <summary>点击折叠</summary>
@@ -63,7 +63,6 @@
 
 | 平台 | 状态 | 采集方式 | 备注 |
 |---|---|---|---|
-| 微信 Android | ⏸ 已停止支持 | — | 微信 8.0.52+ 对普通无障碍服务隐藏了消息文字，且近期对部分账号/设备的聊天界面开启防截屏（FLAG_SECURE），两条读取路径都不通，没有干净的读取方式；1.4 起不再读取微信 |
 | QQ Android | ✅ 全链路 | 无障碍读节点 | 9.3.50 实测（群聊）；1v1 按同结构推断 |
 | X / Twitter 私信 | ✅ 全链路 | 解析 Compose 节点的 content-desc | 12.25 实测，中文界面；英文界面未验 |
 | 飞书 / Lark | ✅ OCR 兜底（真机验证） | 无障碍读气泡矩形 + ML Kit 离线 OCR 识别正文 | 正文自绘不在无障碍树里，1.3 起对每个气泡矩形做 OCR；我/对方按已读状态判 |
@@ -209,7 +208,6 @@ QQ / X / 飞书 ──(无障碍读节点)──▶ 采集最近消息
 | App | 树的情况 | 适配器怎么做 |
 |---|---|---|
 | QQ | 节点开放，有 id | 正文 `id/mjn`、标题 `id/371`，按气泡贴哪侧头像判谁说的 |
-| 微信 | 已隐藏消息文字，部分设备还开启了防截屏 | 已停用：1.4 起不再接入采集分发，适配器代码保留在仓库中，以便日后微信策略变化时恢复 |
 | X | Compose，无 id，text 为空 | 解析 content-desc `发件人：正文。时间。Read`，发件人是「你」即我方 |
 | 飞书 | 正文自绘，树里没有文字 | 树上拿 bubble_content_container 矩形与已读状态，OCR 每个矩形的正文 |
 
@@ -246,46 +244,21 @@ JDK 17 + Android SDK（platform 35 / build-tools 35）。
 - **X 只按中文界面验过**：分隔符 `：`、`上午 / 下午`、`Read` 是中文界面实测；英文界面只做了兜底，未验。
 - **群聊**：按一对一分析，「对方」与关系设定对群聊不准。
 - **中文**：Jev 主训练语言是英文，题目用英文、聊天内容保留中文；建议用自己的真实对话做一批标注校准（见 `tools/jev/`）。
-- **微信不可用**：微信从 8.0.52+ 对普通无障碍服务隐藏了消息文字，近期又对部分账号/设备的聊天界面开启了防截屏（FLAG_SECURE），两条读取路径都不通，这是微信自身的限制，本项目没有其它技术手段可以读取；**1.4 起不再对微信做任何读取、截屏或填入，进入微信只提示一次「微信已限制读取，请在别的软件上使用」**。
 - **知识库检索是标签/标题包含匹配**，不做语义检索，笔记请打好标签才能被命中。历史按「谁说 + 原文」去重，同一个人重复说同一句只记一次。
 - **OCR 依赖系统放行截屏**：无障碍服务要被系统允许截屏才能用，小米 / HyperOS 可能拒绝（面板会提示失败原因）；受保护窗口（`FLAG_SECURE`）截不到。
 - **OCR 只认屏幕上看得见的部分**：长消息被截断的部分读不到；识别有错字。
 - **包体变大**：ML Kit 中文离线模型让 APK 从约 12 MB 增至约 27 MB，且只打 arm64-v8a。
 
-## 交流群 / 需求收集
+## 联系与反馈
 
-**如需联系，请公众号私信。** 合作、赞助、反馈、进群失败、二维码过期，都走公众号私信，其它渠道不一定看得到。
-
-<p align="center"><img src="docs/images/wechat-mp.png" width="180" alt="公众号二维码" /></p>
-
-想听真实需求：你在哪个聊天 App 上最想要这个副驾？希望它判断什么、怎么提示、什么绝对不能碰？扫码进群直接说。**1 至 7 群已满，不要再扫；8、9 群任选一个，请勿重复加入。**
-
-<table align="center"><tr>
-  <td align="center"><img src="docs/images/wechat-group-8.png" width="200" alt="8 群" /><br/><b>8 群</b></td>
-  <td align="center"><img src="docs/images/wechat-group-9.png" width="200" alt="9 群" /><br/><b>9 群</b></td>
-</tr></table>
-
-<p align="center"><sub>以下七群已满，请勿再扫：</sub></p>
-
-<table align="center"><tr>
-  <td align="center"><img src="docs/images/wechat-group-1.png" width="80" alt="1 群（已满）" /><br/><sub>1 群</sub></td>
-  <td align="center"><img src="docs/images/wechat-group-2.png" width="80" alt="2 群（已满）" /><br/><sub>2 群</sub></td>
-  <td align="center"><img src="docs/images/wechat-group-3.png" width="80" alt="3 群（已满）" /><br/><sub>3 群</sub></td>
-  <td align="center"><img src="docs/images/wechat-group-4.png" width="80" alt="4 群（已满）" /><br/><sub>4 群</sub></td>
-  <td align="center"><img src="docs/images/wechat-group-5.png" width="80" alt="5 群（已满）" /><br/><sub>5 群</sub></td>
-  <td align="center"><img src="docs/images/wechat-group-6.png" width="80" alt="6 群（已满）" /><br/><sub>6 群</sub></td>
-  <td align="center"><img src="docs/images/wechat-group-7.png" width="80" alt="7 群（已满）" /><br/><sub>7 群</sub></td>
-</tr></table>
-
-<p align="center"><sub>群二维码 7 天有效（本批到 2026-09-29），过期了公众号私信要新码。</sub></p>
+有问题或需求请到 [GitHub Issues](https://github.com/jev-chat/jev-chat-jarvis/issues) 提。
 
 ## 姊妹项目
 
 同在 [jev-chat](https://github.com/jev-chat) 组织下：
 
-- [Jev 聊天助手 macOS 版](https://github.com/jev-chat/jev-chat-mac)：微信消息意图识别悬浮窗，看屏 + 本地小模型判断意图和风险，再按话术生成回复候选，纯只读。
-- [Jev 聊天助手 Windows 版](https://github.com/jev-chat/jev-chat-windows)：微信 Windows 4.x 旁挂的回复辅助，窗口截图 + 本地离线 OCR，3 条候选一键填入，发送永远手动。
-- [微墨 WeChat Ink](https://github.com/Snowwit88/wechat-ink)：微信公众号写作、配图与排版助手，支持资料核验、学术风图文和草稿发布。
+- [Jev 聊天助手 macOS 版](https://github.com/jev-chat/jev-chat-jarvis-mac)：消息意图识别悬浮窗，看屏 + 本地小模型判断意图和风险，再按话术生成回复候选，纯只读。
+- [Jev 聊天助手 Windows 版](https://github.com/jev-chat/jev-chat-windows)：聊天窗口旁挂的回复辅助，窗口截图 + 本地离线 OCR，3 条候选一键填入，发送永远手动。
 
 隐私政策见 [PRIVACY.md](PRIVACY.md)（说明读取了什么、发给谁、存在哪里、怎么删除）。
 
@@ -297,14 +270,10 @@ Copyright © 2026 Finderchangchang 与 jev-chat 贡献者。代码以 [MIT](LICE
 - **必须注明出处**：分发或商用时保留 LICENSE 与 NOTICE，并在产品「关于」页、说明文档或发布页写明来源。推荐写法：`基于 Jev 聊天助手（https://github.com/jev-chat/jev-chat-jarvis）二次开发`。
 - 不要用「Jev 聊天助手」「jev-chat」名称或 chatjevs.com 域名暗示由原作者出品或背书。
 
-**免责声明**：本项目只处理你自己设备上、你自己有权查看的聊天。请遵守微信、QQ、X、飞书等各软件的许可协议与当地法律法规，作者不对使用后果负责。
+**免责声明**：本项目只处理你自己设备上、你自己有权查看的聊天。请遵守 QQ、X、飞书等各软件的许可协议与当地法律法规，作者不对使用后果负责。
 
 ## ☕ 请我喝杯咖啡
 
 如果你觉得我写的这玩意儿对你有点帮助，欢迎请我喝杯咖啡。咖啡因一到位，脑子就开始冒泡，源源不断地驱动我往前跑；哪天我更新得特别勤，说明这杯续上了 😄
-
-<p align="center">
-  <img src="docs/images/donate/wechat-donate-v3.png" width="260" alt="微信赞赏码（姓名已隐去）" />
-</p>
 
 <p align="center"><sub>随手支持，不用有压力；不支持也没关系，点个 Star 或提条建议同样能让我开心很久。</sub></p>
