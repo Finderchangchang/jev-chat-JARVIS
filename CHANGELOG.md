@@ -11,8 +11,8 @@
 ## v1.4 — 2026-09-23
 
 **新增**
-- 判断接口新增「博查 Jev」，排在第一位（博查 Jev / OpenRouter / TypeSafe 直连 / 自定义）。选中后自动填好服务地址 `https://jev.bocha.cn` 和模型 `bocha-jev-v1`，页面上显示官方地址并支持一键复制，当前限时免费。博查 Jev 和 TypeSafe 直连协议一致，都是 `POST /v1/systemone`，请求体 `{model, state, questions}`。
-- 全新安装默认使用博查 Jev，不用自己找接口就能先用起来；已经配置过判断接口的老用户不受影响，provider 和密钥都不会被改动。
+- 判断接口新增「博查 Jev」，排在第二位（OpenRouter / 博查 Jev / TypeSafe 直连 / 自定义）。选中后自动填好服务地址 `https://jev.bocha.cn` 和模型 `bocha-jev-v1`，页面上显示官方地址并支持一键复制，当前限时免费。博查 Jev 和 TypeSafe 直连协议一致，都是 `POST /v1/systemone`，请求体 `{model, state, questions}`。
+- 全新安装默认仍是 OpenRouter，博查 Jev 需要手动选；已经配置过判断接口的老用户不受影响，provider 和密钥都不会被改动。
 
 **变更**
 - 支持范围调整为 QQ / X / 飞书，以及任意 App 的「截屏识别一次」。
