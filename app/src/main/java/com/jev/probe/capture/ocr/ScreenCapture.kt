@@ -63,7 +63,7 @@ class ScreenCapture(
     private val main = Handler(Looper.getMainLooper())
 
     /** Take one screenshot. [onResult] runs on the main thread, exactly once. */
-    fun capture(onResult: (Result) -> Unit) {
+    fun capture(shouldCapture: () -> Boolean = { true }, onResult: (Result) -> Unit) {
         val now = SystemClock.elapsedRealtime()
         val need = requiredInterval()
         if (now - lastAttemptAt < need) {
@@ -84,7 +84,12 @@ class ScreenCapture(
 
         // Hide the bubble, give the compositor a frame to drop it, then shoot.
         runCatching { hideOverlay() }
-        main.postDelayed({ shoot(finish, done) }, HIDE_SETTLE_MS)
+        main.postDelayed({
+            // The foreground can change while the overlay settles. Do not shoot
+            // the next app and label its pixels as the original conversation.
+            if (shouldCapture()) shoot(finish, done)
+            else finish(Result.Failed(CODE_CANCELLED, "会话已变化，已取消截屏"))
+        }, HIDE_SETTLE_MS)
     }
 
     private fun shoot(finish: (Result) -> Unit, done: AtomicBoolean) {
@@ -177,6 +182,7 @@ class ScreenCapture(
         const val CODE_THROTTLED = -1
         /** Our own watchdog: the platform callback never arrived. */
         const val CODE_TIMEOUT = -2
+        const val CODE_CANCELLED = -3
         private const val CODE_INTERNAL = 1
 
         private const val MIN_INTERVAL_MS = 1000L
