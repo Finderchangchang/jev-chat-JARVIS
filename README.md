@@ -11,6 +11,7 @@
 [![Version](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-v1.4-1f6feb?style=flat-square)](CHANGELOG.md)
 [![Android](https://img.shields.io/badge/Android-11%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](#快速开始)
 [![License](https://img.shields.io/github/license/jev-chat/jev-chat-jarvis?style=flat-square)](LICENSE)
+[![🇺🇸 English](https://img.shields.io/badge/%F0%9F%87%BA%F0%9F%87%B8-English-0A66C2?style=flat-square)](README.en.md)
 
 [官网](https://chatjevs.com) · [隐私政策](PRIVACY.md) · [下载 APK](apk/jev-assistant-v1.4-release.apk) · [历史版本](https://github.com/jev-chat/jev-chat-jarvis/releases) · [更新日志](CHANGELOG.md) · [macOS 版](https://github.com/jev-chat/jev-chat-jarvis-mac) · [Windows 版](https://github.com/jev-chat/jev-chat-windows)
 
