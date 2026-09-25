@@ -70,7 +70,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
 
     // ---------------------------------------------------------------- judge
 
-    /** "bocha" | "openrouter" | "typesafe" | "vercel" | "zen" | "custom". */
+    /** "bocha" | "openrouter" | "typesafe" | "vercel" | "zen" | "opper" | "custom". */
     var judgeProvider: String
         get() = sp.getString(K_JUDGE_PROVIDER, PROVIDER_OPENROUTER) ?: PROVIDER_OPENROUTER
         set(v) = sp.edit().putString(K_JUDGE_PROVIDER, v.trim()).apply()
@@ -229,6 +229,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
             PROVIDER_TYPESAFE -> "$base/v1/systemone"
             PROVIDER_VERCEL -> "$base/v1/systemone"   // TypeSafe-compatible gateway
             PROVIDER_ZEN -> "$base/v1/systemone"      // TypeSafe-compatible gateway
+            PROVIDER_OPPER -> "$base/v1/systemone"    // TypeSafe-compatible gateway
             PROVIDER_CUSTOM -> judgeBaseUrl.trim()   // user supplies the full URL
             else -> "$base/alpha/decisions"
         }
@@ -292,6 +293,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val PROVIDER_TYPESAFE = "typesafe"
         const val PROVIDER_VERCEL = "vercel"
         const val PROVIDER_ZEN = "zen"
+        const val PROVIDER_OPPER = "opper"
         const val PROVIDER_CUSTOM = "custom"
 
         const val OCR_MLKIT = "mlkit"
@@ -314,6 +316,11 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         // per judgment), jev-1.13-free is fully free but capability-limited.
         const val DEFAULT_JUDGE_BASE_ZEN = "https://opencode.ai/zen"
         const val DEFAULT_JUDGE_MODEL_ZEN = "jev-1.13"
+        // Opper's TypeSafe-compatible API. Same /v1/systemone body and answers;
+        // Jev at $0.042/M input, output free. opper/kev-4b (open Kev 4B) takes
+        // the same body if typed into the model box.
+        const val DEFAULT_JUDGE_BASE_OPPER = "https://api.opper.ai/v3/compat"
+        const val DEFAULT_JUDGE_MODEL_OPPER = "typesafe/jev-latest"
 
         // Reply route presets (OpenAI-compatible chat completions).
         const val DEFAULT_REPLY_BASE = "https://openrouter.ai/api/v1"

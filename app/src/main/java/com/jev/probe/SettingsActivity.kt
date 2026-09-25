@@ -82,7 +82,8 @@ class SettingsActivity : AppCompatActivity() {
             Prefs.PROVIDER_TYPESAFE -> 2
             Prefs.PROVIDER_VERCEL -> 3
             Prefs.PROVIDER_ZEN -> 4
-            Prefs.PROVIDER_CUSTOM -> 5
+            Prefs.PROVIDER_OPPER -> 5
+            Prefs.PROVIDER_CUSTOM -> 6
             else -> 0
         }
         // Bocha promo block — official address + one-tap copy (limited-time free).
@@ -115,7 +116,7 @@ class SettingsActivity : AppCompatActivity() {
         bochaBox.visibility = if (judgeProviderIdx == 1) View.VISIBLE else View.GONE
 
         judgeCard.addView(pills(
-            listOf("OpenRouter", "博查 Jev", "TypeSafe 直连", "Vercel", "OpenCode Zen", "自定义"), judgeProviderIdx) { idx ->
+            listOf("OpenRouter", "博查 Jev", "TypeSafe 直连", "Vercel", "OpenCode Zen", "Opper", "自定义"), judgeProviderIdx) { idx ->
             judgeProviderIdx = idx
             when (idx) {
                 0 -> {
@@ -138,16 +139,20 @@ class SettingsActivity : AppCompatActivity() {
                     judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_ZEN)
                     judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_ZEN)
                 }
+                5 -> {
+                    judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_OPPER)
+                    judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_OPPER)
+                }
                 // Custom POSTs the box verbatim, so a preset HOST left in the box
                 // would hit the API root. Expand it into the full endpoint the
                 // preset would have used; anything hand-typed is left alone.
-                5 -> judgeBaseEdit.setText(expandJudgeUrl(judgeBaseEdit.text.toString()))
+                6 -> judgeBaseEdit.setText(expandJudgeUrl(judgeBaseEdit.text.toString()))
             }
             bochaBox.visibility = if (idx == 1) View.VISIBLE else View.GONE
         })
         judgeCard.addView(label("Base URL"))
         judgeCard.addView(judgeBaseEdit)
-        judgeCard.addView(text("OpenRouter 拼 /alpha/decisions；博查 Jev / TypeSafe / Vercel / OpenCode Zen 拼 /v1/systemone；自定义按原样 POST。Vercel 用 AI Gateway 的密钥，OpenCode Zen 用 Zen 的密钥。",
+        judgeCard.addView(text("OpenRouter 拼 /alpha/decisions；博查 Jev / TypeSafe / Vercel / OpenCode Zen / Opper 拼 /v1/systemone；自定义按原样 POST。Vercel 用 AI Gateway 的密钥，OpenCode Zen 用 Zen 的密钥，Opper 用 Opper 的密钥。",
             11f, sub))
         judgeCard.addView(bochaBox)
         judgeCard.addView(label("密钥"))
@@ -457,7 +462,8 @@ class SettingsActivity : AppCompatActivity() {
         2 -> Prefs.PROVIDER_TYPESAFE
         3 -> Prefs.PROVIDER_VERCEL
         4 -> Prefs.PROVIDER_ZEN
-        5 -> Prefs.PROVIDER_CUSTOM
+        5 -> Prefs.PROVIDER_OPPER
+        6 -> Prefs.PROVIDER_CUSTOM
         else -> Prefs.PROVIDER_OPENROUTER
     }
 
@@ -474,6 +480,7 @@ class SettingsActivity : AppCompatActivity() {
             Prefs.DEFAULT_JUDGE_BASE_TYPESAFE -> Prefs.PROVIDER_TYPESAFE
             Prefs.DEFAULT_JUDGE_BASE_VERCEL -> Prefs.PROVIDER_VERCEL
             Prefs.DEFAULT_JUDGE_BASE_ZEN -> Prefs.PROVIDER_ZEN
+            Prefs.DEFAULT_JUDGE_BASE_OPPER -> Prefs.PROVIDER_OPPER
             else -> providerOf(idx)
         }
 
@@ -484,6 +491,7 @@ class SettingsActivity : AppCompatActivity() {
         Prefs.DEFAULT_JUDGE_BASE_TYPESAFE -> Prefs.DEFAULT_JUDGE_BASE_TYPESAFE + "/v1/systemone"
         Prefs.DEFAULT_JUDGE_BASE_VERCEL -> Prefs.DEFAULT_JUDGE_BASE_VERCEL + "/v1/systemone"
         Prefs.DEFAULT_JUDGE_BASE_ZEN -> Prefs.DEFAULT_JUDGE_BASE_ZEN + "/v1/systemone"
+        Prefs.DEFAULT_JUDGE_BASE_OPPER -> Prefs.DEFAULT_JUDGE_BASE_OPPER + "/v1/systemone"
         else -> base.trim()
     }
 
@@ -492,6 +500,7 @@ class SettingsActivity : AppCompatActivity() {
         Prefs.PROVIDER_TYPESAFE -> Prefs.DEFAULT_JUDGE_BASE_TYPESAFE
         Prefs.PROVIDER_VERCEL -> Prefs.DEFAULT_JUDGE_BASE_VERCEL
         Prefs.PROVIDER_ZEN -> Prefs.DEFAULT_JUDGE_BASE_ZEN
+        Prefs.PROVIDER_OPPER -> Prefs.DEFAULT_JUDGE_BASE_OPPER
         else -> Prefs.DEFAULT_JUDGE_BASE_OPENROUTER
     }
 
@@ -500,6 +509,7 @@ class SettingsActivity : AppCompatActivity() {
         Prefs.PROVIDER_TYPESAFE -> Prefs.DEFAULT_JUDGE_MODEL_TYPESAFE
         Prefs.PROVIDER_VERCEL -> Prefs.DEFAULT_JUDGE_MODEL_VERCEL
         Prefs.PROVIDER_ZEN -> Prefs.DEFAULT_JUDGE_MODEL_ZEN
+        Prefs.PROVIDER_OPPER -> Prefs.DEFAULT_JUDGE_MODEL_OPPER
         else -> Prefs.DEFAULT_JUDGE_MODEL_OPENROUTER
     }
 
