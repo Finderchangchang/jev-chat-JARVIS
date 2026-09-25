@@ -57,6 +57,7 @@ object HttpJson {
         var attempt = 0
         var last: ApiException? = null
         while (attempt < MAX_ATTEMPTS) {
+            if (Thread.currentThread().isInterrupted) throw InterruptedException("Request cancelled")
             var conn: HttpURLConnection? = null
             try {
                 conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -89,6 +90,9 @@ object HttpJson {
                 val text = readBody(conn.inputStream)
                 if (text.isBlank()) throw ApiException(route, code, "响应体为空")
                 return JSONObject(text)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw e
             } catch (e: ApiException) {
                 if (e.status != null && e.status in 400..499) throw e  // client error: no retry
                 last = e
