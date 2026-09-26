@@ -50,7 +50,14 @@ open class ChatCaptureService : AccessibilityService() {
      *  disabled and handled by a short-circuit notice instead of an adapter (see
      *  [maybeCapture] / [onAccessibilityEvent]). [WeChatAdapter] is kept in the
      *  codebase for a possible future restore, just not used here. */
-    private val adapters = listOf(QQAdapter(), XAdapter(), FeishuAdapter()).associateBy { it.pkg }
+    // Douyin and Duoshan share one adapter (same codebase); only the pkg differs.
+    private val adapters = listOf(
+        QQAdapter(),
+        XAdapter(),
+        FeishuAdapter(),
+        DouyinAdapter("com.ss.android.ugc.aweme"),
+        DouyinAdapter("my.maya.android")
+    ).associateBy { it.pkg }
 
     /** Submit to the worker, ignoring rejection after the service is torn down
      *  (a stale overlay callback must never crash the process). */
@@ -100,24 +107,59 @@ open class ChatCaptureService : AccessibilityService() {
         observeTarget(null)
         cancelAnalysis()
         currentSnapshot = null
+        lastGoodTitle = null
+        lastGoodTitleKey = null
     }
 
-    /** Read the live target, never the previous chat's cached/stabilized title. */
-    private fun targetFor(root: AccessibilityNodeInfo): ConversationSession.Target? {
+    /**
+     * Last title we could actually read inside the current window.
+     *
+     * Douyin/Duoshan stop reporting the title for a moment while the message list
+     * re-lays out — measured on device 2026-09-27, `title=NULL` appeared twice
+     * inside 10 s exactly as the chat's item count changed. `targetFor` used to
+     * turn that into a null target, which invalidated the session, cancelled the
+     * in-flight judgment and parked the bubble: a visible bubble that never
+     * produced a result. Reusing the last title read *in the same window* rides
+     * out the flicker. [leaveConversation] clears it, so leaving the chat window
+     * (the only way to reach another conversation) can never leak a title across.
+     */
+    private var lastGoodTitle: String? = null
+    private var lastGoodTitleKey: String? = null
+
+    /**
+     * Read the live target, never the previous chat's cached/stabilized title.
+     *
+     * [snapshot] lets a caller that has just run [ChatAppAdapter.extract] reuse
+     * that reading instead of paying for a second full tree walk on the main
+     * thread — `maybeCapture` needs both the snapshot and the target.
+     */
+    private fun targetFor(
+        root: AccessibilityNodeInfo,
+        snapshot: ChatSnapshot? = null
+    ): ConversationSession.Target? {
         val pkg = root.packageName?.toString() ?: return null
         if (pkg == PKG_WECHAT || pkg == packageName || pkg == "com.android.systemui" ||
             pkg.contains("launcher", true) || pkg == "com.miui.home") return null
         val adapter = adapters[pkg]
         var messagesSignature: String? = null
         val title = if (adapter != null) {
-            val snapshot = adapter.extract(root, resources) ?: return null
-            messagesSignature = snapshot.takeIf { it.messages.isNotEmpty() }?.signature()
-            // A loading/unknown title cannot prove which conversation is open.
-            snapshot.title?.takeUnless { isTransientTitle(it) } ?: return null
+            val snap = snapshot ?: adapter.extract(root, resources) ?: return null
+            messagesSignature = snap.takeIf { it.messages.isNotEmpty() }?.signature()
+            // A loading/unknown title cannot prove which conversation is open —
+            // but the one we just read in this same window can stand in for it.
+            val read = snap.title?.takeUnless { isTransientTitle(it) }
+            val key = "$pkg#${root.windowId}"
+            if (read != null) {
+                lastGoodTitle = read
+                lastGoodTitleKey = key
+                read
+            } else {
+                lastGoodTitle?.takeIf { lastGoodTitleKey == key }
+            }
         } else {
-            findTitleInActionBar(root, Int.MAX_VALUE, resources.displayMetrics.widthPixels,
-                resources, 0.15, 0.85)
+            findTitleInActionBar(root, resources)
         }
+        if (title == null) return null
         return ConversationSession.Target(pkg, root.windowId, title, messagesSignature)
     }
 
@@ -141,6 +183,12 @@ open class ChatCaptureService : AccessibilityService() {
     private var pendingSnapshot: ChatSnapshot? = null
     @Volatile private var currentSnapshot: ChatSnapshot? = null
     private var foregroundPkg: String? = null
+
+    /** Uptime of the last tree read; see [CAPTURE_THROTTLE_MS]. Main thread only. */
+    private var lastCaptureAt = 0L
+
+    /** Last package logged by [maybeCapture]; breadcrumbs on change only. */
+    private var lastCapturePkg: String? = null
 
     // ---- OCR path (B stage). Everything here runs on the main thread: the
     // screenshot callback and the ML Kit callback are both posted back to it.
@@ -239,15 +287,34 @@ open class ChatCaptureService : AccessibilityService() {
         }
 
         when (type) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            // A window change is real navigation (list → chat → back), so it is
+            // always worth a read.
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> maybeCapture()
+            // Content changes and scrolls arrive in floods — Douyin emits one per
+            // frame of the video feed — and each read walks the accessibility tree
+            // ON THE MAIN THREAD. Unthrottled, that starved the overlay until the
+            // bubble could not be dragged (reported 2026-09-27).
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
-            AccessibilityEvent.TYPE_VIEW_SCROLLED -> maybeCapture()
+            AccessibilityEvent.TYPE_VIEW_SCROLLED -> {
+                if (android.os.SystemClock.uptimeMillis() - lastCaptureAt >= CAPTURE_THROTTLE_MS) {
+                    maybeCapture()
+                }
+            }
         }
     }
 
     private fun maybeCapture() {
+        lastCaptureAt = android.os.SystemClock.uptimeMillis()
         val root = rootInActiveWindow ?: run { leaveConversation(); overlay?.hide(); return }
         val pkg = root.packageName?.toString()
+        // Breadcrumb on every package change. Without it there is no way to tell
+        // "this app never reached the capture path" from "the adapter read
+        // nothing" — which is exactly the ambiguity behind a report that an app
+        // gives no reply at all.
+        if (pkg != lastCapturePkg) {
+            lastCapturePkg = pkg
+            Log.i(TAG, "capture pkg=$pkg adapter=${adapters.containsKey(pkg)}")
+        }
         // WeChat is fully disabled — no tree read, no screenshot, no OCR, no fill.
         // A content-changed / scrolled event in WeChat only re-shows the one-time
         // notice (deduped); it must never reach an adapter or the OCR path.
@@ -266,7 +333,7 @@ open class ChatCaptureService : AccessibilityService() {
         // their list screen produced no bubble at all.
         val rawSnapshot = adapter.extract(root, resources)
         if (rawSnapshot == null) { leaveConversation(); overlay?.showIdle(null); return }
-        val target = targetFor(root)
+        val target = targetFor(root, rawSnapshot)
         if (target == null) { leaveConversation(); overlay?.showIdle(null); return }
         observeTarget(target)
         // Use only this window's title; never inherit another conversation's title.
@@ -430,9 +497,7 @@ open class ChatCaptureService : AccessibilityService() {
         // a screenshot — just show the notice (a manual tap always shows it).
         if (pkg == PKG_WECHAT) { showWeChatDisabled(auto = false); return }
         // Top bar text, if this app has one we can read; else the first OCR line.
-        val title = root?.let {
-            findTitleInActionBar(it, Int.MAX_VALUE, resources.displayMetrics.widthPixels, resources, 0.15, 0.85)
-        }
+        val title = root?.let { findTitleInActionBar(it, resources) }
         val target = root?.let { targetFor(it) } ?: run {
             overlay?.toast("无法确认当前会话，请等待标题加载后重试")
             return
@@ -628,6 +693,10 @@ open class ChatCaptureService : AccessibilityService() {
             "com.tencent.mobileqq" -> root.findAccessibilityNodeInfosByViewId("com.tencent.mobileqq:id/input").firstOrNull()
             "com.ss.android.lark" -> root.findAccessibilityNodeInfosByViewId("com.ss.android.lark:id/kb_rich_text_content").firstOrNull()
             "com.twitter.android" -> findEditable(root)
+            // Douyin / Duoshan: both expose the send box as `msg_et`, under
+            // their own package prefix (verified on device 2026-09-27).
+            "com.ss.android.ugc.aweme" -> root.findAccessibilityNodeInfosByViewId("com.ss.android.ugc.aweme:id/msg_et").firstOrNull()
+            "my.maya.android" -> root.findAccessibilityNodeInfosByViewId("my.maya.android:id/msg_et").firstOrNull()
             else -> null // Unknown apps support explicit clipboard copy, not unverified writes.
         }
         // Re-read the node after SET_TEXT: the accessibility cache may still
@@ -716,6 +785,14 @@ open class ChatCaptureService : AccessibilityService() {
 
     companion object {
         private const val TAG = "JEVASSIST"
+
+        /**
+         * Minimum gap between tree reads driven by content-change / scroll
+         * events. A state change bypasses it. 400 ms is well under the time a
+         * human takes to read a reply, and it turns Douyin's per-frame event
+         * flood into a handful of reads per second.
+         */
+        private const val CAPTURE_THROTTLE_MS = 400L
 
         /** WeChat's package. Reading it (node tree / screenshot / OCR) is what
          *  trips WeChat's anti-screenshot risk control, so it is fully disabled:

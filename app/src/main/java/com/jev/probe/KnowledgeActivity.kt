@@ -313,6 +313,8 @@ class KnowledgeActivity : AppCompatActivity() {
         "com.tencent.mobileqq" -> "QQ"
         "com.ss.android.lark" -> "飞书"
         "com.twitter.android" -> "X"
+        "com.ss.android.ugc.aweme" -> "抖音"
+        "my.maya.android" -> "多闪"
         else -> pkg
     }
 

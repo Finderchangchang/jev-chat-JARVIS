@@ -35,24 +35,47 @@ private fun looksLikeTimestamp(t: String): Boolean =
         Regex("""\d+月\d+日""").containsMatchIn(t) ||
         t == "昨天" || t == "今天"
 
+/** Bottom-bar labels that are never a conversation title. Douyin and Duoshan
+ *  keep the previous screen (the 消息 tab) alive in the same tree while a chat is
+ *  open, so its centred `消息` action-bar title used to win the topmost-text race
+ *  and become the conversation identity — the reason replies were the same for
+ *  every chat. */
+private val ACTION_BAR_EXCLUDE_LABELS = setOf(
+    "首页", "朋友", "消息", "我", "发现", "多闪", "拍摄",
+    "视频", "关注", "推荐", "同城"
+)
+
+/** Longest a conversation title can be before it stops looking like one. */
+private const val TITLE_MAX_CHARS = 24
+
 /**
- * Conversation title in the top action bar: the topmost short, roughly centered
- * text above the first message bubble. Constrained so we never grab an in-chat
- * timestamp. Used by QQ as a fallback when its title id is absent, by X, and by
- * the bubble menu's manual OCR capture. WeChat has its own [findWeChatTitle]
- * (group titles need extra filtering this generic version does not do).
+ * Conversation title in the top action bar: the topmost short text inside the
+ * action-bar band (the top 14% of the screen). Used by QQ as a fallback when its
+ * title id is absent, by X, by Douyin/Duoshan, and by the bubble menu's manual
+ * OCR capture. WeChat has its own [findWeChatTitle] (group titles need extra
+ * filtering this generic version does not do).
+ *
+ * **v9 rewrite — measured on device 2026-09-27.** The previous version clamped
+ * the band to the first message bubble's top and demanded a roughly centred
+ * candidate. Both were wrong, and either one silently turned "no title" into
+ * "this app never gets analysed at all" (see `targetFor`, which gives up when the
+ * title is null):
+ *
+ * - Duoshan/Douyin scroll the message list UNDER a translucent action bar, so
+ *   the first bubble's top is ~50px. `min(firstBubbleTop, 14%)` collapsed the
+ *   band to 50px and the real title (bottom 220) could never qualify — Duoshan
+ *   never analysed.
+ * - QQ left-aligns its title (centre x = 322 of 1440 = 22%), outside the old
+ *   25%..75% window — QQ never analysed.
+ *
+ * The band is now fixed and the centre constraint is gone. What a title cannot
+ * be is filtered instead: longer than [TITLE_MAX_CHARS], a clock/date stamp, a
+ * relative time label, a bottom-bar label, or a sentence (Chinese sentence
+ * punctuation). The action bar is always the topmost text on screen, so the
+ * topmost surviving candidate is the title.
  */
-internal fun findTitleInActionBar(
-    root: AccessibilityNodeInfo,
-    firstBubbleTop: Int,
-    width: Int,
-    res: Resources,
-    minCenterRatio: Double = 0.25,
-    maxCenterRatio: Double = 0.75
-): String? {
-    val actionBarMax = minOf(firstBubbleTop, (res.displayMetrics.heightPixels * 0.14).toInt())
-    val minCenterX = (width * minCenterRatio).toInt()
-    val maxCenterX = (width * maxCenterRatio).toInt()
+internal fun findTitleInActionBar(root: AccessibilityNodeInfo, res: Resources): String? {
+    val actionBarMax = (res.displayMetrics.heightPixels * 0.14).toInt()
     val stack = ArrayDeque<AccessibilityNodeInfo>()
     stack.addLast(root)
     var best: String? = null
@@ -61,12 +84,14 @@ internal fun findTitleInActionBar(
     while (stack.isNotEmpty() && guard < 5000) {
         guard++
         val node = stack.removeLast()
-        val text = node.text?.toString()
-        if (!text.isNullOrBlank() && text.length <= 24 && !looksLikeTimestamp(text)) {
+        val text = node.text?.toString()?.trim()
+        if (!text.isNullOrBlank() && text.length <= TITLE_MAX_CHARS &&
+            !looksLikeTimestamp(text) && text !in RELATIVE_TIME_LABELS &&
+            text !in ACTION_BAR_EXCLUDE_LABELS &&
+            !WECHAT_TITLE_EXCLUDE_PUNCT.containsMatchIn(text)
+        ) {
             val b = Rect(); node.getBoundsInScreen(b)
-            if (b.bottom in 1 until actionBarMax && b.centerX() in minCenterX..maxCenterX) {
-                if (b.top < bestTop) { bestTop = b.top; best = text }
-            }
+            if (b.bottom in 1..actionBarMax && b.top < bestTop) { bestTop = b.top; best = text }
         }
         for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
     }
@@ -201,7 +226,6 @@ class QQAdapter : ChatAppAdapter {
         val width = res.displayMetrics.widthPixels
         // top, left, right, text
         val bubbles = ArrayList<Bubble>()
-        var firstBubbleTop = Int.MAX_VALUE
         var title: String? = null
         var hasInput = false
 
@@ -216,15 +240,20 @@ class QQAdapter : ChatAppAdapter {
             if (id == BUBBLE_ID && !text.isNullOrBlank()) {
                 val b = Rect(); node.getBoundsInScreen(b)
                 bubbles.add(Bubble(b.top, b.left, b.right, text))
-                if (b.top < firstBubbleTop) firstBubbleTop = b.top
             }
             if (!hasInput && id == INPUT_ID) hasInput = true
             if (id == TITLE_ID && title == null) text?.let { if (it.isNotBlank()) title = it }
             for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
         }
-        if (bubbles.isEmpty() && !hasInput) return null
+        if (bubbles.isEmpty() && !hasInput) { breadcrumb("not-in-chat"); return null }
 
-        if (title == null) title = findTitleInActionBar(root, firstBubbleTop, width, res)
+        // TITLE_ID is an obfuscated id that changes between QQ builds (it was
+        // `371` on 9.3.50 and `3g3` on 9.3.65), so the structural search is the
+        // dependable one. QQ left-aligns the title, which is why the old
+        // centred-only search never found it (see [findTitleInActionBar]).
+        if (title == null) title = findTitleInActionBar(root, res)
+        // Counts and the title only — never message content.
+        breadcrumb("bubbles=${bubbles.size} input=$hasInput title=${title ?: "NULL"}")
         if (bubbles.isEmpty()) return ChatSnapshot(title, emptyList())
 
         val avatarEdge = (width * 0.13).toInt()
@@ -235,6 +264,17 @@ class QQAdapter : ChatAppAdapter {
             Msg(if (dr < dl) "me" else "other", b.text)
         }
         return ChatSnapshot(title, msgs)
+    }
+
+    /** Last logged reading; see [breadcrumb]. */
+    private var lastExtractLog = ""
+
+    /** Log [line] under this adapter's package, only when it changes. Turns
+     *  "QQ gave no reply and nothing was logged" into a readable breadcrumb. */
+    private fun breadcrumb(line: String) {
+        if (line == lastExtractLog) return
+        lastExtractLog = line
+        android.util.Log.i("JEVASSIST", "$pkg $line")
     }
 
     private data class Bubble(val top: Int, val left: Int, val right: Int, val text: String)
@@ -443,7 +483,6 @@ class XAdapter : ChatAppAdapter {
     override fun extract(root: AccessibilityNodeInfo, res: Resources): ChatSnapshot? {
         val width = res.displayMetrics.widthPixels
         val rows = ArrayList<Row>()
-        var firstRowTop = Int.MAX_VALUE
         var hasInput = false
         // A full-width View whose desc has a separator ("：" / ": ") — the shape
         // of a message row, whether or not parseXDesc could fully parse it.
@@ -473,7 +512,6 @@ class XAdapter : ChatAppAdapter {
                     val parsed = parseXDesc(desc)
                     if (parsed != null) {
                         rows.add(Row(b.top, parsed.first, parsed.second))
-                        if (b.top < firstRowTop) firstRowTop = b.top
                     }
                 }
             }
@@ -496,9 +534,7 @@ class XAdapter : ChatAppAdapter {
         // so hasInput alone used to misfire OCR fallback on the DM list.
         if (!hasInput || !(hasMessageRowShape || hasDmLabel)) return null
 
-        // X left-aligns the thread title (x≈300..443 of 1200), so widen the
-        // shared helper's "roughly centered" band for this app.
-        val title = findTitleInActionBar(root, firstRowTop, width, res, 0.15, 0.85)
+        val title = findTitleInActionBar(root, res)
         // In a DM thread but no rows parsed → empty snapshot (OCR fallback cue).
         if (rows.isEmpty()) return ChatSnapshot(title, emptyList())
         rows.sortBy { it.top }
@@ -507,4 +543,345 @@ class XAdapter : ChatAppAdapter {
     }
 
     private data class Row(val top: Int, val sender: String, val text: String)
+}
+
+/** A time label that is not a timestamp *pattern* — `looksLikeTimestamp` only
+ *  knows clock/date shapes, but Douyin and Duoshan also print relative labels
+ *  as their own node. A message that is literally one of these is not worth
+ *  losing sleep over; mistaking the label for a message is worse. */
+private val RELATIVE_TIME_LABELS = setOf("刚刚", "昨天", "今天", "前天", "更早")
+
+/** Douyin (com.ss.android.ugc.aweme) and Duoshan (my.maya.android).
+ *
+ *  Duoshan is the SAME codebase — its launcher is
+ *  `com.ss.android.ugc.aweme.splash.SplashActivity` — so one implementation
+ *  serves both and only [pkg] differs.
+ *
+ *  Verified against screenshots on a real device (1440x3200, 2026-09-27) by
+ *  reading one two-account conversation from each app in turn, which is what
+ *  pins the side rule down: the same message sits on the right in the app whose
+ *  account sent it and on the left in the other, so **the avatar's edge is the
+ *  sender** (left → other, right → me). The avatar's contentDescription is
+ *  *not* usable for this — it is the login account's own name on the right and
+ *  the peer's on the left, which is the same fact stated twice.
+ *
+ *  Douyin obfuscates view ids per build (`1o-`, `glu`, `swq`, `dxs`…), so
+ *  nothing here may depend on them. The one readable id, the `msg_et` input
+ *  box, is used only to answer "are we in a chat". Everything else is found by
+ *  structure: the messages sit in a RecyclerView, each item carries a ~124px
+ *  avatar pinned to its sender's edge, and the body is a DmtTextView when the
+ *  bubble is text or (Douoshan) a plain TextView — picked as the widest
+ *  qualifying text so timestamps, avatars, "图片" and "已读" lose out.
+ *
+ *  Known limit: a shared video/image card contributes its caption or author
+ *  label as the message text, because the card's own text is not a bubble.
+ *
+ *  **v9 (2026-09-27): the stale-screen fix.** Douyin and Duoshan leave the whole
+ *  消息 screen — a story ring *and* the conversation list, both RecyclerViews —
+ *  in the tree while a chat is open, and both sit above the input box, so the old
+ *  geometry test did not exclude them. Avatar counting could not separate them
+ *  either (measured on a real Douyin chat: story ring 1, conversation list 1,
+ *  the actual message list 1), and the tie went to whichever the depth-first
+ *  walk happened to meet first — the story ring. That is exactly why the replies
+ *  came out the same no matter which chat was opened: the story ring is the same
+ *  five names every time. The list is now chosen as shown in [findMessageList].
+ */
+class DouyinAdapter(override val pkg: String) : ChatAppAdapter {
+
+    override fun extract(root: AccessibilityNodeInfo, res: Resources): ChatSnapshot? {
+        val width = res.displayMetrics.widthPixels
+        // Pass 1 — cheap: are we in a chat at all? One walk, no per-node subtree
+        // work. The expensive case is not the chat, it is the video feed: Douyin
+        // fires a content-changed event for every frame of playback, and each one
+        // used to walk the whole tree and then walk it again for every
+        // RecyclerView — all on the MAIN thread, which starved the overlay until
+        // it could no longer be dragged (reported 2026-09-27).
+        //
+        // The send box doubles as the anchor for pass 2: it exists only in a chat,
+        // the message list is always pinned right above it, and the container it
+        // shares with the list is what tells the chat's own list apart from the
+        // stale 消息 screen's.
+        val input = inputBox(root) ?: run { breadcrumb("not-in-chat"); return null }
+        val inputBounds = Rect(); input.getBoundsInScreen(inputBounds)
+        val inputTop = inputBounds.top
+
+        // Pass 2 — only inside a chat, and only now, pay to find the list.
+        val list = findMessageList(root, width, inputTop, ancestorsOf(input))
+        val rows = ArrayList<Row>()
+        if (list != null) {
+            for (i in 0 until list.childCount) {
+                val item = list.getChild(i) ?: continue
+                val body = findBody(item) ?: continue
+                rows.add(Row(body.rect.top, sideOf(item, body.rect, width), body.text))
+            }
+        }
+        val title = findTitleInActionBar(root, res)
+        // A one-line breadcrumb, emitted only when the reading changes. Without
+        // it a failure here is invisible: targetFor() silently gives up when no
+        // title can be determined, so the app simply never analyses and nothing
+        // anywhere is logged to say why. The chosen list's own bounds are in it
+        // too — `rows` alone cannot show that the wrong list was read.
+        val where = list?.let { val b = Rect(); it.getBoundsInScreen(b); "$b" } ?: "none"
+        breadcrumb("list=$where rows=${rows.size} title=${title ?: "NULL"}")
+        // In a chat but nothing readable → empty snapshot, the OCR-fallback cue.
+        if (rows.isEmpty()) return ChatSnapshot(title, emptyList())
+        rows.sortBy { it.top }
+        return ChatSnapshot(title, rows.map { Msg(it.side, it.text) })
+    }
+
+    /** Log [line] under this adapter's package, only when it changes. */
+    private fun breadcrumb(line: String) {
+        if (line == lastExtractLog) return
+        lastExtractLog = line
+        android.util.Log.i("JEVASSIST", "$pkg $line")
+    }
+
+    /** Last logged reading; see the breadcrumb in [extract]. */
+    private var lastExtractLog = ""
+
+    /** One walk, no subtree work: the send-message box node, or null. */
+    private fun inputBox(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(root)
+        var guard = 0
+        while (stack.isNotEmpty() && guard < 6000) {
+            guard++
+            val n = stack.removeLast()
+            if ((n.viewIdResourceName ?: "").endsWith(INPUT_ID_SUFFIX)) {
+                val b = Rect(); n.getBoundsInScreen(b)
+                if (b.height() > 0) return n
+            }
+            for (i in n.childCount - 1 downTo 0) n.getChild(i)?.let { stack.addLast(it) }
+        }
+        return null
+    }
+
+    /** The input box's ancestor chain, deepest first, capped for safety. */
+    private fun ancestorsOf(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
+        val chain = ArrayList<AccessibilityNodeInfo>()
+        var cur: AccessibilityNodeInfo? = node
+        while (cur != null && chain.size < ANCESTOR_LIMIT) { chain.add(cur); cur = cur.parent }
+        return chain
+    }
+
+    /**
+     * How deep a container [rv] shares with the input box: the index, in
+     * `inputChain`, of their deepest common ancestor. 0 would mean the list sits
+     * inside the input box itself; smaller is a more specific container.
+     * `Int.MAX_VALUE` when they share nothing but the window root.
+     */
+    private fun sharedDepth(rv: AccessibilityNodeInfo, inputChain: List<AccessibilityNodeInfo>): Int {
+        var cur: AccessibilityNodeInfo? = rv
+        var steps = 0
+        while (cur != null && steps < ANCESTOR_LIMIT) {
+            val i = inputChain.indexOfFirst { it == cur }
+            if (i >= 0) return i
+            cur = cur.parent
+            steps++
+        }
+        return Int.MAX_VALUE
+    }
+
+    /**
+     * The message list, or null when no RecyclerView qualifies.
+     *
+     * 1. **Geometry** — it must sit above the send box.
+     * 2. **Avatars** — the list whose items carry sender avatars beats the
+     *    quick-reply strip (a flat row of pills: 0 avatars).
+     * 3. **Container** — ties on the avatar count go to the list that shares the
+     *    *deepest* container with the input box. This is what separates the
+     *    chat's own list from the stale 消息 screen: the chat's list and the input
+     *    live inside one screen container, while the stale story ring and
+     *    conversation list only meet the input at the window's content root.
+     *    Without this the tie (all three scored 1 on a real Douyin chat) went to
+     *    whichever RecyclerView came first in the tree walk — the story ring.
+     */
+    private fun findMessageList(
+        root: AccessibilityNodeInfo,
+        width: Int,
+        inputTop: Int,
+        inputChain: List<AccessibilityNodeInfo>
+    ): AccessibilityNodeInfo? {
+        var best: AccessibilityNodeInfo? = null
+        var bestScore = 0
+        var bestDepth = Int.MAX_VALUE
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(root)
+        var guard = 0
+        while (stack.isNotEmpty() && guard < 6000) {
+            guard++
+            val n = stack.removeLast()
+            if ((n.className?.toString() ?: "").contains("RecyclerView")) {
+                val b = Rect(); n.getBoundsInScreen(b)
+                // Above the send box, allowing for the list's own bottom padding.
+                if (b.top < inputTop && b.bottom <= inputTop + INPUT_SLACK) {
+                    val score = avatarItemCount(n, width)
+                    val depth = if (score > 0) sharedDepth(n, inputChain) else Int.MAX_VALUE
+                    if (score > bestScore || (score == bestScore && score > 0 && depth < bestDepth)) {
+                        bestScore = score
+                        bestDepth = depth
+                        best = n
+                    }
+                }
+            }
+            for (i in n.childCount - 1 downTo 0) n.getChild(i)?.let { stack.addLast(it) }
+        }
+        return best
+    }
+
+    /**
+     * The message body of one list item, or null if the item carries no text.
+     *
+     * A DmtTextView always wins (that is Douyin's bubble text); otherwise the
+     * widest qualifying node wins, which is what picks the bubble over the
+     * nickname label, the timestamp and the emoji-reaction chips that share the
+     * same item.
+     *
+     * **v9 fix — the bodies were coming back EMPTY.** This walks a node's `text`
+     * *or* its `contentDescription`, but the caller used to store `node.text`
+     * unconditionally. Both apps put the message in the contentDescription and
+     * leave `text` blank (`DmtTextView.swq desc="…"` on Douyin, a plain
+     * `TextView` with `text=""` and a desc on Duoshan), so every message was
+     * captured as an empty string. Measured on device 2026-09-27, the breadcrumb
+     * read `rows=4 … me:0 | other:0 | other:38 | other:3` — i.e. a full
+     * conversation reduced to three empty bodies. The model was handed a blank
+     * chat, which is why the suggestions came out as the same few generic lines
+     * for every conversation. The matched label is what gets returned now.
+     */
+    private fun findBody(item: AccessibilityNodeInfo): Body? {
+        var widest: Body? = null
+        var widestW = -1
+        var bubble: Body? = null
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(item)
+        var guard = 0
+        while (stack.isNotEmpty() && guard < 400) {
+            guard++
+            val n = stack.removeLast()
+            val text = n.text?.toString()?.trim()
+            val desc = n.contentDescription?.toString()?.trim()
+            val label = if (text.isNullOrBlank()) desc else text
+            if (!label.isNullOrBlank() && isBodyLabel(label, desc)) {
+                val b = Rect(); n.getBoundsInScreen(b)
+                // Reject unset/offscreen rects. RecyclerView keeps detached and
+                // not-yet-laid-out items in the tree, and Android reports those as
+                // the Int.MAX_VALUE/MIN_VALUE sentinel (seen on Duoshan). Left in,
+                // one such node lands in `rows` with a nonsense top and is sorted
+                // to the wrong end of the conversation.
+                if (b.width() > 0 && b.height() > 0 && b.top >= 0) {
+                    val body = Body(label, b)
+                    if (b.width() > widestW) { widestW = b.width(); widest = body }
+                    if ((n.className?.toString() ?: "").contains("DmtTextView")) bubble = body
+                }
+            }
+            for (i in n.childCount - 1 downTo 0) n.getChild(i)?.let { stack.addLast(it) }
+        }
+        return bubble ?: widest
+    }
+
+    /** One message body: the text it carries (its `text`, else its description)
+     *  and where it sits, which the side rule and the sort order both need. */
+    private data class Body(val text: String, val rect: Rect)
+
+    /** Is this node's text a message body rather than chat chrome? */
+    private fun isBodyLabel(label: String, desc: String?): Boolean {
+        if (looksLikeTimestamp(label)) return false
+        if (label in RELATIVE_TIME_LABELS) return false
+        // The avatar button is labelled "<nickname>的头像" on both apps.
+        if (desc != null && desc.endsWith(AVATAR_SUFFIX)) return false
+        if (label == "图片" || label == "视频" || label == "已读") return false
+        return true
+    }
+
+    /** How many of [list]'s direct children carry a sender avatar. */
+    private fun avatarItemCount(list: AccessibilityNodeInfo, width: Int): Int {
+        var n = 0
+        for (i in 0 until list.childCount) {
+            val item = list.getChild(i) ?: continue
+            if (hasAvatar(item, width)) n++
+        }
+        return n
+    }
+
+    /**
+     * Does [item] carry a sender avatar? Short-circuits on the first hit and
+     * stops after [AVATAR_SCAN_BUDGET] nodes: an item can be a whole media card,
+     * and this runs once per candidate item of every RecyclerView, on the main
+     * thread, for every accessibility event.
+     */
+    private fun hasAvatar(item: AccessibilityNodeInfo, width: Int): Boolean {
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(item)
+        var guard = 0
+        while (stack.isNotEmpty() && guard < AVATAR_SCAN_BUDGET) {
+            guard++
+            val n = stack.removeLast()
+            val b = Rect(); n.getBoundsInScreen(b)
+            if (isAvatarRect(b, width)) return true
+            for (i in n.childCount - 1 downTo 0) n.getChild(i)?.let { stack.addLast(it) }
+        }
+        return false
+    }
+
+    /** Centre x of [item]'s sender avatar, or -1 when the item has none. */
+    private fun avatarCenter(item: AccessibilityNodeInfo, width: Int): Int {
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(item)
+        var guard = 0
+        while (stack.isNotEmpty() && guard < AVATAR_SCAN_BUDGET) {
+            guard++
+            val n = stack.removeLast()
+            val b = Rect(); n.getBoundsInScreen(b)
+            if (isAvatarRect(b, width)) return b.centerX()
+            for (i in n.childCount - 1 downTo 0) n.getChild(i)?.let { stack.addLast(it) }
+        }
+        return -1
+    }
+
+    /**
+     * A small square hugging one screen edge. The media cards, bubbles and emoji
+     * chips sharing an item are either larger or nowhere near an edge.
+     */
+    private fun isAvatarRect(b: Rect, width: Int): Boolean {
+        val w = b.width(); val h = b.height()
+        return w in AVATAR_MIN..AVATAR_MAX && h in AVATAR_MIN..AVATAR_MAX &&
+            (b.left <= width * EDGE_RATIO || b.right >= width * (1 - EDGE_RATIO))
+    }
+
+    /**
+     * Which side sent this item: the edge its avatar hugs. Falls back to the
+     * body's own centre when no avatar is present, so a layout change degrades
+     * the reading instead of throwing the message away.
+     */
+    private fun sideOf(item: AccessibilityNodeInfo, body: Rect, width: Int): String {
+        val avatar = avatarCenter(item, width)
+        val cx = if (avatar >= 0) avatar else body.centerX()
+        return if (cx > width / 2) "me" else "other"
+    }
+
+    private data class Row(val top: Int, val side: String, val text: String)
+
+    companion object {
+        /** The send-message box. The only id either app leaves un-obfuscated. */
+        private const val INPUT_ID_SUFFIX = ":id/msg_et"
+        private const val AVATAR_SUFFIX = "的头像"
+        private const val AVATAR_MIN = 90
+        private const val AVATAR_MAX = 180
+
+        /** Node budget for one avatar search. Douyin's media cards are deep, and
+         *  this runs on the main thread for every event; the avatar is always
+         *  near the top of an item, so a small budget finds it and caps the cost. */
+        private const val AVATAR_SCAN_BUDGET = 40
+
+        /** How far below the send box's top edge a message list may still end.
+         *  Douyin's list overhangs its input by ~90px of padding (measured). */
+        private const val INPUT_SLACK = 150
+
+        /** Fraction of the screen width an avatar must sit within to count. */
+        private const val EDGE_RATIO = 0.15
+
+        /** Depth cap when walking up from the input box. Real trees are ~30 deep;
+         *  this only stops a malformed one. */
+        private const val ANCESTOR_LIMIT = 64
+    }
 }
