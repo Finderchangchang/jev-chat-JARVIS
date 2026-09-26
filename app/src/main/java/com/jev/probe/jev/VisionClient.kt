@@ -9,19 +9,27 @@ import org.json.JSONObject
 
 /**
  * The vision route: an OpenAI-compatible `/chat/completions` endpoint that
- * accepts `image_url` content parts. A-stage shell only — B stage wires it to
- * the screenshot pipeline (see docs/v1.3-plan.md "OCR 分层").
+ * accepts `image_url` content parts. B stage wires it to the screenshot
+ * pipeline (see docs/v1.3-plan.md "OCR 分层").
  *
  * Reads visionBaseUrl / visionKey / visionModel from [Prefs]. The base URL does
- * not inherit from the reply route (a DeepSeek-style host has no vision
- * endpoint); the key still falls back reply -> judge.
+ * not inherit from the reply route (a reply host may have no vision model); the
+ * key still falls back reply -> judge.
+ *
+ * DeepSeek official (`https://api.deepseek.com/v1`) is supported: `deepseek-flash`
+ * takes standard `image_url` parts, so the same body works there. Earlier
+ * versions of this file hard-blocked DeepSeek on the belief that its API had no
+ * vision model; that is no longer true and the guard is gone. Note that
+ * `deepseek-v4-pro` does NOT accept images, so the model name matters.
  *
  * Wire format notes that cost real debugging time:
  * - JPEG, not PNG: a screenshot as PNG base64 is several times larger.
  * - `Base64.NO_WRAP`: Android's default inserts newlines, which corrupts the
  *   data URL.
  * - The image part goes BEFORE the text part — DashScope's compatible-mode
- *   rejects the other order.
+ *   rejects the other order, and DeepSeek's docs show text-first. Both orders
+ *   are accepted by DeepSeek; image-first is kept because DashScope requires it,
+ *   and one order that works on every host beats two host-specific paths.
  */
 class VisionClient(private val prefs: Prefs) {
 
@@ -52,6 +60,14 @@ class VisionClient(private val prefs: Prefs) {
             .put("model", prefs.visionModel)
             .put("messages", messages)
             .put("temperature", 0.0)
+            .apply {
+                // Transcription is a read-out task, not a reasoning one, and
+                // DeepSeek defaults thinking mode ON at effort=high — which on a
+                // screenshot is a long wait for nothing. See DeepSeekDialect.
+                if (DeepSeekDialect.isDeepSeek(url)) {
+                    put("thinking", JSONObject().put("type", "disabled"))
+                }
+            }
         val resp = HttpJson.post(url, prefs.effectiveVisionKey(), body, Route.VISION, HttpJson.headersFor(url))
         return resp.optJSONArray("choices")?.optJSONObject(0)
             ?.optJSONObject("message")?.optString("content") ?: ""
@@ -65,8 +81,17 @@ class VisionClient(private val prefs: Prefs) {
             return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
         }
 
-        /** DeepSeek's official API has no vision model; `image_url` is rejected. */
-        fun supportsVision(baseUrl: String): Boolean =
-            !baseUrl.contains("api.deepseek.com", ignoreCase = true)
+        /**
+         * True when the model name is one DeepSeek serves text-only, so the
+         * settings page can warn before spending a round trip on a guaranteed
+         * 400. This is a *warning*, not a block: the model box is free text and
+         * DeepSeek may ship further vision models, so an unrecognised name is
+         * allowed through and the API has the final say.
+         */
+        fun looksTextOnlyDeepSeekModel(model: String): Boolean =
+            model.trim().equals("deepseek-v4-pro", ignoreCase = true)
+
+        /** The DeepSeek vision-capable model, pre-filled by the settings preset. */
+        fun deepSeekVisionModel(): String = Prefs.DEEPSEEK_VISION_MODEL
     }
 }

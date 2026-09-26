@@ -82,7 +82,8 @@ class SettingsActivity : AppCompatActivity() {
             Prefs.PROVIDER_TYPESAFE -> 2
             Prefs.PROVIDER_VERCEL -> 3
             Prefs.PROVIDER_ZEN -> 4
-            Prefs.PROVIDER_CUSTOM -> 5
+            Prefs.PROVIDER_DEEPSEEK -> 5
+            Prefs.PROVIDER_CUSTOM -> 6
             else -> 0
         }
         // Bocha promo block — official address + one-tap copy (limited-time free).
@@ -115,7 +116,7 @@ class SettingsActivity : AppCompatActivity() {
         bochaBox.visibility = if (judgeProviderIdx == 1) View.VISIBLE else View.GONE
 
         judgeCard.addView(pills(
-            listOf("OpenRouter", "博查 Jev", "TypeSafe 直连", "Vercel", "OpenCode Zen", "自定义"), judgeProviderIdx) { idx ->
+            listOf("OpenRouter", "博查 Jev", "TypeSafe 直连", "Vercel", "OpenCode Zen", "DeepSeek 官方", "自定义"), judgeProviderIdx) { idx ->
             judgeProviderIdx = idx
             when (idx) {
                 0 -> {
@@ -138,16 +139,25 @@ class SettingsActivity : AppCompatActivity() {
                     judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_ZEN)
                     judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_ZEN)
                 }
+                // DeepSeek 官方: no Jev protocol, so the 7 questions are asked in
+                // prose over /chat/completions with JSON mode on. Same answers,
+                // different transport — no separate UI path needed.
+                5 -> {
+                    judgeBaseEdit.setText(Prefs.DEFAULT_JUDGE_BASE_DEEPSEEK)
+                    judgeModelEdit.setText(Prefs.DEFAULT_JUDGE_MODEL_DEEPSEEK)
+                }
                 // Custom POSTs the box verbatim, so a preset HOST left in the box
                 // would hit the API root. Expand it into the full endpoint the
                 // preset would have used; anything hand-typed is left alone.
-                5 -> judgeBaseEdit.setText(expandJudgeUrl(judgeBaseEdit.text.toString()))
+                6 -> judgeBaseEdit.setText(expandJudgeUrl(judgeBaseEdit.text.toString()))
             }
             bochaBox.visibility = if (idx == 1) View.VISIBLE else View.GONE
         })
         judgeCard.addView(label("Base URL"))
         judgeCard.addView(judgeBaseEdit)
-        judgeCard.addView(text("OpenRouter 拼 /alpha/decisions；博查 Jev / TypeSafe / Vercel / OpenCode Zen 拼 /v1/systemone；自定义按原样 POST。Vercel 用 AI Gateway 的密钥，OpenCode Zen 用 Zen 的密钥。",
+        judgeCard.addView(text("OpenRouter 拼 /alpha/decisions；博查 Jev / TypeSafe / Vercel / OpenCode Zen 拼 /v1/systemone；" +
+            "DeepSeek 官方拼 /chat/completions（用提示词问出同样 7 个判断，走 JSON 模式）；自定义按原样 POST。" +
+            "Vercel 用 AI Gateway 的密钥，OpenCode Zen 用 Zen 的密钥。",
             11f, sub))
         judgeCard.addView(bochaBox)
         judgeCard.addView(label("密钥"))
@@ -197,7 +207,8 @@ class SettingsActivity : AppCompatActivity() {
         // --- 回复接口 ---
         val replyCard = card()
         replyCard.addView(cardTitle("回复接口"))
-        replyCard.addView(text("生成 3 条候选回复。任何 OpenAI 兼容地址，填到 /v1 为止。", 12f, sub))
+        replyCard.addView(text("生成 3 条候选回复。任何 OpenAI 兼容地址，填到 /v1 为止；DeepSeek 官方填 " +
+            "https://api.deepseek.com/v1，模型 deepseek-chat 或 deepseek-flash。", 12f, sub))
 
         val replyBaseEdit = edit(prefs.replyBaseUrl, Prefs.DEFAULT_REPLY_BASE)
         val replyModelEdit = edit(prefs.replyModel, Prefs.DEFAULT_REPLY_MODEL)
@@ -252,20 +263,23 @@ class SettingsActivity : AppCompatActivity() {
         // --- 视觉接口 ---
         val visionCard = card()
         visionCard.addView(cardTitle("视觉接口（OCR 用，可先不填）"))
-        visionCard.addView(text("读不到控件树的 App 走截图识别。B 阶段才用到，现在填不填都不影响。", 12f, sub))
+        visionCard.addView(text("读不到控件树的 App 走截图识别。DeepSeek 官方用 deepseek-flash（支持图片）；" +
+            "它的 deepseek-v4-pro 不接受图片。", 12f, sub))
 
         val visionBaseEdit = edit(prefs.visionBaseUrl, Prefs.DEFAULT_VISION_BASE)
         val visionModelEdit = edit(prefs.visionModel, Prefs.DEFAULT_VISION_MODEL)
         val visionIdx = when (prefs.visionBaseUrl.trim().trimEnd('/')) {
             Prefs.DEFAULT_VISION_BASE -> 0
             Prefs.DASHSCOPE_BASE -> 1
-            else -> 2
+            Prefs.DEEPSEEK_BASE -> 2
+            else -> 3
         }
         visionCard.addView(pills(
-            listOf("OpenRouter", "通义兼容", "自定义"), visionIdx) { idx ->
+            listOf("OpenRouter", "通义兼容", "DeepSeek 官方", "自定义"), visionIdx) { idx ->
             when (idx) {
                 0 -> { visionBaseEdit.setText(Prefs.DEFAULT_VISION_BASE); visionModelEdit.setText(Prefs.DEFAULT_VISION_MODEL) }
                 1 -> { visionBaseEdit.setText(Prefs.DASHSCOPE_BASE); visionModelEdit.setText(Prefs.DASHSCOPE_VISION_MODEL) }
+                2 -> { visionBaseEdit.setText(Prefs.DEEPSEEK_BASE); visionModelEdit.setText(Prefs.DEEPSEEK_VISION_MODEL) }
             }
         })
         visionCard.addView(label("Base URL"))
@@ -277,8 +291,13 @@ class SettingsActivity : AppCompatActivity() {
         val visionResult = resultText()
         visionCard.addView(cardBtn("测试视觉") {
             val visionBase = visionBaseEdit.text.toString().trim()
-            if (!VisionClient.supportsVision(visionBase.ifBlank { Prefs.DEFAULT_VISION_BASE })) {
-                visionResult.text = GUARD_NO_VISION
+            val visionModelTyped = visionModelEdit.text.toString().trim()
+                .ifBlank { Prefs.DEFAULT_VISION_MODEL }
+            // DeepSeek serves one vision model and one text-only flagship; warn on
+            // the text-only one rather than spending a round trip on a certain 400.
+            if (visionBase.contains("api.deepseek.com", ignoreCase = true) &&
+                VisionClient.looksTextOnlyDeepSeekModel(visionModelTyped)) {
+                visionResult.text = "deepseek-v4-pro 不接受图片，请把模型改成 ${Prefs.DEEPSEEK_VISION_MODEL}"
                 return@cardBtn
             }
             val probe = draftPrefs(SCRATCH_VISION) {
@@ -457,7 +476,8 @@ class SettingsActivity : AppCompatActivity() {
         2 -> Prefs.PROVIDER_TYPESAFE
         3 -> Prefs.PROVIDER_VERCEL
         4 -> Prefs.PROVIDER_ZEN
-        5 -> Prefs.PROVIDER_CUSTOM
+        5 -> Prefs.PROVIDER_DEEPSEEK
+        6 -> Prefs.PROVIDER_CUSTOM
         else -> Prefs.PROVIDER_OPENROUTER
     }
 
@@ -474,6 +494,7 @@ class SettingsActivity : AppCompatActivity() {
             Prefs.DEFAULT_JUDGE_BASE_TYPESAFE -> Prefs.PROVIDER_TYPESAFE
             Prefs.DEFAULT_JUDGE_BASE_VERCEL -> Prefs.PROVIDER_VERCEL
             Prefs.DEFAULT_JUDGE_BASE_ZEN -> Prefs.PROVIDER_ZEN
+            Prefs.DEFAULT_JUDGE_BASE_DEEPSEEK -> Prefs.PROVIDER_DEEPSEEK
             else -> providerOf(idx)
         }
 
@@ -484,6 +505,7 @@ class SettingsActivity : AppCompatActivity() {
         Prefs.DEFAULT_JUDGE_BASE_TYPESAFE -> Prefs.DEFAULT_JUDGE_BASE_TYPESAFE + "/v1/systemone"
         Prefs.DEFAULT_JUDGE_BASE_VERCEL -> Prefs.DEFAULT_JUDGE_BASE_VERCEL + "/v1/systemone"
         Prefs.DEFAULT_JUDGE_BASE_ZEN -> Prefs.DEFAULT_JUDGE_BASE_ZEN + "/v1/systemone"
+        Prefs.DEFAULT_JUDGE_BASE_DEEPSEEK -> Prefs.DEFAULT_JUDGE_BASE_DEEPSEEK + "/chat/completions"
         else -> base.trim()
     }
 
@@ -492,6 +514,7 @@ class SettingsActivity : AppCompatActivity() {
         Prefs.PROVIDER_TYPESAFE -> Prefs.DEFAULT_JUDGE_BASE_TYPESAFE
         Prefs.PROVIDER_VERCEL -> Prefs.DEFAULT_JUDGE_BASE_VERCEL
         Prefs.PROVIDER_ZEN -> Prefs.DEFAULT_JUDGE_BASE_ZEN
+        Prefs.PROVIDER_DEEPSEEK -> Prefs.DEFAULT_JUDGE_BASE_DEEPSEEK
         else -> Prefs.DEFAULT_JUDGE_BASE_OPENROUTER
     }
 
@@ -500,6 +523,7 @@ class SettingsActivity : AppCompatActivity() {
         Prefs.PROVIDER_TYPESAFE -> Prefs.DEFAULT_JUDGE_MODEL_TYPESAFE
         Prefs.PROVIDER_VERCEL -> Prefs.DEFAULT_JUDGE_MODEL_VERCEL
         Prefs.PROVIDER_ZEN -> Prefs.DEFAULT_JUDGE_MODEL_ZEN
+        Prefs.PROVIDER_DEEPSEEK -> Prefs.DEFAULT_JUDGE_MODEL_DEEPSEEK
         else -> Prefs.DEFAULT_JUDGE_MODEL_OPENROUTER
     }
 
@@ -665,10 +689,6 @@ class SettingsActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "JEVASSIST"
-
-        /** DeepSeek's official API has no vision model; say so instead of a 400. */
-        private const val GUARD_NO_VISION =
-            "该接口不支持视觉（DeepSeek 官方没有 image_url），请换 OpenRouter 或通义兼容"
 
         /** One scratch prefs file per test button; never the real config. */
         private const val SCRATCH_JUDGE = "jev_probe_scratch_judge"

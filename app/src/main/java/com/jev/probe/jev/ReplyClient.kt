@@ -1,5 +1,6 @@
 package com.jev.probe.jev
 
+import android.util.Log
 import com.jev.probe.core.ChatSnapshot
 import com.jev.probe.core.Prefs
 import com.jev.probe.core.kb.ChatContext
@@ -10,6 +11,10 @@ import org.json.JSONObject
  * The generative route: any OpenAI-compatible `/chat/completions` endpoint.
  * Drafts the 3 candidate replies, and (D stage) summarizes text. Reads
  * replyBaseUrl / replyKey / replyModel from [Prefs].
+ *
+ * Works unchanged against DeepSeek official (`https://api.deepseek.com/v1`):
+ * the wire format is plain OpenAI chat completions, and the JSON-mode handling
+ * for the drafting call lives in [DeepSeekDialect].
  */
 class ReplyClient(private val prefs: Prefs) {
 
@@ -24,12 +29,25 @@ class ReplyClient(private val prefs: Prefs) {
         val convo = snapshot.messages.takeLast(10).joinToString("\n") {
             (if (it.side == "me") "我" else "对方") + "：" + it.text
         }
-        val sys = "你是中文即时通讯回复助手。只输出一个 JSON 数组，含且仅含 3 条候选回复文本，" +
+        // The DeepSeek JSON Output guide requires the word "json" in the prompt
+        // AND a sample of the wanted shape; both are present here. The sample is
+        // an OBJECT holding the array, because `response_format=json_object`
+        // produces a JSON object — asking for a bare array is what made the
+        // model answer in a shape the old parser could not read (see
+        // [parseThree]). A bare array is still accepted there, so a host without
+        // `response_format` keeps working.
+        val sys = "你是中文即时通讯回复助手。只输出一个 JSON 对象，" +
+            "含一个字段 \"$REPLIES_KEY\"，其值是含且仅含 3 条候选回复文本的数组，" +
             "三条策略要有区别（例如：一条稳妥承接、一条给具体行动或承诺、一条简短低姿态）。" +
-            "每条不超过 40 字，口语、自然、像真人在聊天软件里发消息。不要解释，不要加引号以外的内容，直接输出 JSON 数组。"
+            "每条不超过 40 字，口语、自然、像真人在聊天软件里发消息。" +
+            "输出格式必须是合法 JSON，形如 {\"$REPLIES_KEY\":[\"第一条\",\"第二条\",\"第三条\"]}。" +
+            "不要解释，不要加任何 JSON 以外的内容，直接输出这个 JSON 对象。"
         val user = knowledgeBlock(relationship, ctx) +
             "关系：$relationship\n\n最近对话：\n$convo\n\n请给出 3 条候选回复。"
-        return parseThree(chat(sys, user, temperature = 0.8))
+        val out = parseThree(chat(sys, user, temperature = 0.8, jsonMode = true))
+        // Lengths only — never the drafted text, which is derived from the chat.
+        Log.i(TAG, "draft ok n=${out.size} lens=${out.joinToString(",") { it.length.toString() }}")
+        return out
     }
 
     /** The background + history preamble; empty string when there is no context. */
@@ -69,38 +87,88 @@ class ReplyClient(private val prefs: Prefs) {
     }
 
     /** One chat-completions round trip; returns the assistant message content. */
-    private fun chat(system: String, user: String, temperature: Double): String {
+    private fun chat(
+        system: String,
+        user: String,
+        temperature: Double,
+        jsonMode: Boolean = false
+    ): String {
         val url = prefs.replyEndpoint()
-        val messages = JSONArray()
-            .put(JSONObject().put("role", "system").put("content", system))
-            .put(JSONObject().put("role", "user").put("content", user))
-        val body = JSONObject()
-            .put("model", prefs.replyModel)
-            .put("messages", messages)
-            .put("temperature", temperature)
-        val resp = HttpJson.post(url, prefs.effectiveReplyKey(), body, Route.REPLY, HttpJson.headersFor(url))
-        return resp.optJSONArray("choices")?.optJSONObject(0)
-            ?.optJSONObject("message")?.optString("content") ?: ""
+        val content = DeepSeekDialect.complete(
+            url = url,
+            key = prefs.effectiveReplyKey(),
+            model = prefs.replyModel,
+            system = system,
+            user = user,
+            temperature = temperature,
+            route = Route.REPLY,
+            jsonMode = jsonMode
+        )
+        if (content.isBlank()) {
+            // Used to return "" here, which surfaced to the user as three
+            // identical "（稍等，我看下）" placeholders and no explanation.
+            throw ApiException(Route.REPLY, null, "模型返回了空内容")
+        }
+        return content
     }
 
+    /**
+     * Pull exactly 3 candidates out of the model's reply.
+     *
+     * Tries a real JSON array first (fences and surrounding prose tolerated),
+     * then a JSON **object** with an array-valued field, then falls back to line
+     * splitting. Anything that cannot yield 3 distinct candidates is reported
+     * instead of being padded with placeholders — a silent pad hides a broken
+     * reply route behind text the user might send.
+     *
+     * The object branch is not decorative: `response_format=json_object` makes
+     * DeepSeek answer with an object, so the whole reply arrives as one line of
+     * `{"…":[…]}`. The array parse missed it, the line fallback saw a single
+     * line, and the draft was declared failed — measured on device 2026-09-27:
+     * `draft returned 1 usable line(s); treating as failure`, i.e. no candidate
+     * replies at all. Both shapes are accepted now.
+     */
     private fun parseThree(content: String): List<String> {
-        val start = content.indexOf('[')
-        val end = content.lastIndexOf(']')
-        if (start >= 0 && end > start) {
-            try {
-                val arr = JSONArray(content.substring(start, end + 1))
-                val out = ArrayList<String>()
-                for (i in 0 until arr.length()) out.add(arr.getString(i).trim())
-                if (out.size >= 3) return out.take(3)
-                while (out.size < 3) out.add("（稍等，我看下）")
-                return out
-            } catch (_: Exception) { }
+        DeepSeekDialect.parseArray(content)?.let { arr ->
+            threeOf(arr)?.let { return it }
         }
-        // Fallback: split lines.
-        val lines = content.split("\n").map { it.trim().trimStart('-', '*', '1', '2', '3', '.', ' ', '"') }
+        DeepSeekDialect.parseObject(content)?.let { obj ->
+            // `replies` first (what the prompt asks for), then any array field.
+            val preferred = obj.optJSONArray(REPLIES_KEY)?.let { threeOf(it) }
+            if (preferred != null) return preferred
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val value = obj.opt(keys.next())
+                if (value is JSONArray) threeOf(value)?.let { return it }
+            }
+        }
+        // Fallback: split lines, stripping common list markers.
+        val lines = content.split("\n")
+            .map { it.trim().trimStart('-', '*', '1', '2', '3', '.', ' ', '"', '[').trimEnd('"', ',', ']') }
             .filter { it.isNotBlank() }
-        val out = lines.take(3).toMutableList()
-        while (out.size < 3) out.add("（稍等，我看下）")
-        return out
+            .distinct()
+        if (lines.size >= 3) return lines.take(3)
+        Log.w(TAG, "draft returned ${lines.size} usable line(s); treating as failure")
+        throw ApiException(Route.REPLY, null, "没能从返回里解析出 3 条候选：${content.take(120)}")
+    }
+
+    /** The first 3 distinct non-blank strings of [arr], or null if there are fewer. */
+    private fun threeOf(arr: JSONArray): List<String>? {
+        val out = ArrayList<String>(3)
+        for (i in 0 until arr.length()) {
+            val v = arr.opt(i)
+            if (v !is String) continue
+            val t = v.trim()
+            if (t.isNotEmpty() && !out.contains(t)) out.add(t)
+            if (out.size == 3) return out
+        }
+        return null
+    }
+
+    companion object {
+        private const val TAG = "JEVASSIST"
+
+        /** The field the draft prompt asks the model to put the array under. */
+        private const val REPLIES_KEY = "replies"
     }
 }

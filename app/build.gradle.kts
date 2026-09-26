@@ -22,7 +22,20 @@ android {
         applicationId = "com.jev.probe"
         minSdk = 30
         targetSdk = 35
-        versionCode = 5
+        // 6 = Douyin / Duoshan adapters + DeepSeek official route on top of
+        // upstream 1.4 (which shipped 5). 7 = thinking-mode latency fix, the
+        // main-thread read throttle and the unset-bounds guard. 8 = anchor the
+        // message list to the send box, so a lingering conversation list is no
+        // longer mistaken for the chat. 9 = read the title from a fixed action-bar
+        // band (QQ left-aligns it, Douyin/Duoshan scroll the list under it) and
+        // pick the message list by the container it shares with the input box.
+        // 10 = keep the message body's contentDescription: both apps put the text
+        // there and leave `text` blank, so every captured message was empty.
+        // 11 = ride out the title flicker Douyin/Duoshan show while the list
+        // re-lays out, instead of cancelling the analysis in flight.
+        // 12 = read the reply out of the JSON *object* that json_object mode
+        // returns (the array-only parser declared every draft a failure).
+        versionCode = 12
         versionName = "1.4"
 
         // ML Kit's bundled Chinese recognizer ships native libs for every ABI.

@@ -221,4 +221,188 @@ object JevQuestions {
         }
         return JSONObject().put("best_reply", q)
     }
+
+    // ---------------------------------------------------------------------
+    // Prompt rendering for OpenAI-compatible hosts (DeepSeek official).
+    //
+    // A host without the Jev protocol has to be *asked in prose* for the very
+    // same answers. To keep the two transports from drifting, the prompt is
+    // generated from the question JSON above rather than hand-written: the
+    // instructions, the choice keys and the score legend all come from the same
+    // source of truth the native protocol sends, so editing a criterion above
+    // changes both routes at once.
+    // ---------------------------------------------------------------------
+
+    /** The `choice` / `score` / `noul` type tag of a question object. */
+    private fun qType(q: JSONObject): String = q.optString("type")
+
+    /**
+     * Render one question into compact prose: the instruction, then the allowed
+     * keys with their criteria (or the 0..N score legend).
+     */
+    private fun renderQuestion(id: String, q: JSONObject): String {
+        val sb = StringBuilder()
+        sb.append("### ").append(id).append('\n')
+        sb.append(q.optString("instructions")).append('\n')
+        val criteria = q.opt("criteria")
+        when (qType(q)) {
+            "noul" -> sb.append("Answer with true or false.\n")
+            "score" -> {
+                if (criteria is JSONArray) {
+                    sb.append("Answer with an integer 0..").append(criteria.length() - 1)
+                        .append(" (0 is the mildest).\n")
+                    for (i in 0 until criteria.length()) {
+                        sb.append("  ").append(i).append(" = ").append(criteria.optString(i)).append('\n')
+                    }
+                }
+            }
+            else -> {
+                sb.append("Answer with exactly one of: ")
+                if (criteria is JSONObject) {
+                    sb.append(criteria.keys().asSequence().joinToString(", ")).append('\n')
+                } else {
+                    sb.append("the listed options\n")
+                }
+                if (criteria is JSONObject) {
+                    criteria.keys().forEach { k ->
+                        sb.append("  ").append(k).append(" = ")
+                            .append(criteria.optString(k)).append('\n')
+                    }
+                }
+            }
+        }
+        return sb.toString()
+    }
+
+    /** The identity + output contract shared by every chat-completions judgment. */
+    fun judgeSystemPrompt(): String =
+        "You are Jev, a precise judge of Chinese instant-messaging conversations. " +
+            "You read the conversation and answer questions about the other person's intent and needs.\n" +
+            "You never write a reply and never give advice; you only classify.\n" +
+            "Answer EVERY question you are asked, using ONLY the allowed keys or numbers given for it.\n" +
+            "Use the full conversation and the background facts; background facts are provided context, " +
+            "not an off-topic digression.\n\n" +
+            "Reply with a single JSON object and nothing else — no markdown fence, no commentary.\n" +
+            "Its keys are the question ids. The value shape depends on how the question is answered:\n" +
+            "  - choice question -> an object {\"choice\": \"<one allowed key>\", \"confidence\": 0.0-1.0}\n" +
+            "  - score question  -> an object {\"score\": <number>, \"confidence\": 0.0-1.0}\n" +
+            "  - true/false      -> an object {\"noul\": true|false}\n" +
+            "Example of the exact JSON shape wanted:\n" +
+            "{\"true_intent\": {\"choice\": \"casual_chat\", \"confidence\": 0.8}, " +
+            "\"danger_level\": {\"score\": 2, \"confidence\": 0.7}, " +
+            "\"should_reply_now\": {\"noul\": true}}"
+
+    /**
+     * Render the state and the asked questions into the user message.
+     *
+     * Only the questions in [questions] are rendered and only they are demanded
+     * back, so the ranking call asks one question and the judgment call asks
+     * seven without either having to filter afterwards.
+     */
+    fun judgeUserPrompt(state: JSONObject, questions: JSONObject): String {
+        val sb = StringBuilder()
+        val chat = state.optJSONObject("chat")
+        sb.append("## Conversation\n")
+        sb.append("Relationship: ").append(chat?.optString("relationship").orEmpty()).append('\n')
+        val msgs = chat?.optJSONArray("messages")
+        if (msgs != null) {
+            for (i in 0 until msgs.length()) {
+                val m = msgs.optJSONObject(i) ?: continue
+                sb.append(if (m.optString("from") == "me") "我：" else "对方：")
+                    .append(m.optString("text")).append('\n')
+            }
+        }
+        val background = state.optString("background")
+        if (background.isNotBlank()) {
+            sb.append("\n## Background (given facts; not off-topic)\n")
+                .append(background).append('\n')
+        }
+        val history = state.optJSONArray("history")
+        if (history != null && history.length() > 0) {
+            sb.append("\n## Earlier messages (oldest first)\n")
+            for (i in 0 until history.length()) {
+                val m = history.optJSONObject(i) ?: continue
+                sb.append(if (m.optString("from") == "me") "我：" else "对方：")
+                    .append(m.optString("text")).append('\n')
+            }
+        }
+        sb.append("\n## Questions\n")
+        val asked = questions.keys().asSequence().toList()
+        asked.forEach { id ->
+            questions.optJSONObject(id)?.let { sb.append('\n').append(renderQuestion(id, it)) }
+        }
+        sb.append("\nAnswer ALL of these ids and only these: ")
+            .append(asked.joinToString(", ")).append('.')
+        return sb.toString()
+    }
+
+    /**
+     * Normalize a chat-completions judgment reply onto the shape the native
+     * protocol returns, so [JudgeClient] parses one thing and only one thing.
+     *
+     * Two tolerances, both for real model behaviour:
+     * - a bare string/number value (`"true_intent": "casual_chat"`) is lifted into
+     *   the object form the parser expects;
+     * - a question the model chose not to answer (or the rank call's sole
+     *   question) falls back to a safe default instead of parsing as null.
+     *
+     * A dropped answer is a degraded judgment, so it is logged — but the choices
+     * that *were* answered stay authoritative and are never overwritten.
+     */
+    fun mergeJudgeReply(reply: JSONObject, asked: List<String>): JSONObject {
+        val out = JSONObject()
+        for (id in asked) {
+            val raw = reply.opt(id)
+            when (raw) {
+                is JSONObject -> out.put(id, raw)
+                is String -> out.put(id, coerceScalar(id, raw))
+                is Number -> out.put(id, coerceScalar(id, raw.toString()))
+                is Boolean -> out.put(id, coerceScalar(id, raw.toString()))
+                else -> {
+                    android.util.Log.w("JEVASSIST", "judge answer missing for '$id'; using default")
+                    out.put(id, defaultAnswer(id))
+                }
+            }
+        }
+        // The native protocol always reports `probabilities` for a choice; the
+        // chat transport has no per-key distribution, so expose the reported
+        // confidence as the winning key's probability. Ranking reads it directly.
+        for (id in asked) {
+            val o = out.optJSONObject(id) ?: continue
+            if (o.has("choice") && !o.has("probabilities")) {
+                val probs = JSONObject().put(o.optString("choice"), o.optDouble("confidence", 0.5))
+                o.put("probabilities", probs)
+            }
+        }
+        return out
+    }
+
+    /** A scalar answer for [id] lifted into the object form the parser expects. */
+    private fun coerceScalar(id: String, value: String): JSONObject {
+        val v = value.trim()
+        return when {
+            // true/false questions are keyed by `noul` (the native protocol calls
+            // the boolean value "noul"; see the JudgeClient reader).
+            v.equals("true", true) || v.equals("false", true) ->
+                JSONObject().put("noul", v.equals("true", true))
+            v.toDoubleOrNull() != null -> JSONObject().put("score", v.toDouble())
+            else -> JSONObject().put("choice", v).put("confidence", 0.5)
+        }
+    }
+
+    /**
+     * Fallback for an unanswered question. Deliberately the *least* alarming
+     * reading of an unknown scene: no danger asserted, nothing claimed about the
+     * other person, and `should_reply_now=false` so the UI never pushes the user
+     * to send substance based on a question the model never answered.
+     */
+    private fun defaultAnswer(id: String): JSONObject = when (id) {
+        "danger_level" -> JSONObject().put("score", 0.0).put("confidence", 0.0)
+        "should_reply_now", "tension_resolved", "literal_question" ->
+            JSONObject().put("noul", false)
+        "she_needs" -> JSONObject().put("choice", "nothing").put("confidence", 0.0)
+        "best_action" -> JSONObject().put("choice", "say_less").put("confidence", 0.0)
+        "best_reply" -> JSONObject().put("choice", "reply_a").put("confidence", 0.0)
+        else -> JSONObject().put("choice", "casual_chat").put("confidence", 0.0)
+    }
 }
