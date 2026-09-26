@@ -14,6 +14,13 @@ import org.json.JSONObject
  * The Jev judgment route only: the 7 judgment questions in one call, and the
  * ranking question over already-drafted candidates. Reads judgeProvider /
  * judgeBaseUrl / judgeKey / judgeModel from [Prefs]; nothing generative here.
+ *
+ * Two transports reach the same 7 answers:
+ * - **Jev protocol** (OpenRouter / Bocha / TypeSafe / Vercel / Zen / custom):
+ *   one POST of `{model, state, questions}`, answers keyed by question id.
+ * - **OpenAI chat completions** (DeepSeek official): the questions are rendered
+ *   into a prompt and the reply is mapped back onto the same ids. See
+ *   [JevQuestions.judgeSystemPrompt] and [JevQuestions.judgeUserPrompt].
  */
 class JudgeClient(private val prefs: Prefs) {
 
@@ -91,12 +98,52 @@ class JudgeClient(private val prefs: Prefs) {
 
     private fun send(state: JSONObject, questions: JSONObject): JSONObject {
         val url = prefs.judgeEndpoint()
+        // DeepSeek official speaks chat completions, not the Jev decision
+        // protocol: render the same questions into a prompt and map the JSON
+        // answer back onto the same keys, so every downstream consumer (overlay,
+        // settings test, knowledge base) is unchanged.
+        if (prefs.judgeUsesChatCompletions()) {
+            return sendViaChatCompletions(url, state, questions)
+        }
         val body = JSONObject()
             .put("model", prefs.judgeModel)
             .put("state", state)
             .put("questions", questions)
         val resp = HttpJson.post(url, prefs.judgeKey, body, Route.JUDGE, HttpJson.headersFor(url))
         return resp.optJSONObject("answers") ?: JSONObject()
+    }
+
+    /**
+     * The chat-completions transport: one prompt carrying the state and the
+     * asked questions, one JSON object back.
+     *
+     * The model is told to answer only the questions it was asked (the judge and
+     * the rank call ask different sets) and may legitimately return a subset;
+     * [JevQuestions.mergeJudgeReply] fills the gaps with safe defaults rather
+     * than letting a partial answer become a null-heavy analysis.
+     */
+    private fun sendViaChatCompletions(
+        url: String,
+        state: JSONObject,
+        questions: JSONObject
+    ): JSONObject {
+        val asked = questions.keys().asSequence().toList()
+        val raw = DeepSeekDialect.complete(
+            url = url,
+            key = prefs.judgeKey,
+            model = prefs.judgeModel,
+            system = JevQuestions.judgeSystemPrompt(),
+            user = JevQuestions.judgeUserPrompt(state, questions),
+            temperature = 0.0,
+            route = Route.JUDGE,
+            jsonMode = true
+        )
+        val parsed = DeepSeekDialect.parseObject(raw)
+        if (parsed == null) {
+            Log.w(TAG, "judge reply was not JSON; treating as unparseable")
+            throw ApiException(Route.JUDGE, null, "返回内容不是合法 JSON：${raw.take(120)}")
+        }
+        return JevQuestions.mergeJudgeReply(parsed, asked)
     }
 
     private fun parseChoice(o: JSONObject?): Choice? {

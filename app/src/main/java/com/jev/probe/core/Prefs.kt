@@ -70,7 +70,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
 
     // ---------------------------------------------------------------- judge
 
-    /** "bocha" | "openrouter" | "typesafe" | "vercel" | "zen" | "custom". */
+    /** "bocha" | "openrouter" | "typesafe" | "vercel" | "zen" | "deepseek" | "custom". */
     var judgeProvider: String
         get() = sp.getString(K_JUDGE_PROVIDER, PROVIDER_OPENROUTER) ?: PROVIDER_OPENROUTER
         set(v) = sp.edit().putString(K_JUDGE_PROVIDER, v.trim()).apply()
@@ -114,8 +114,9 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
 
     /**
      * Blank = the OpenRouter vision default. Deliberately does NOT follow
-     * [replyBaseUrl]: a reply host like DeepSeek has no vision endpoint, so
-     * inheriting it would silently break OCR.
+     * [replyBaseUrl]: a reply host may have no vision model, so inheriting it
+     * blindly would silently break OCR. DeepSeek official *is* a valid vision
+     * host now (`deepseek-flash` accepts `image_url`), so it gets its own pill.
      */
     var visionBaseUrl: String
         get() = sp.getString(K_VISION_BASE, DEFAULT_VISION_BASE) ?: DEFAULT_VISION_BASE
@@ -229,10 +230,21 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
             PROVIDER_TYPESAFE -> "$base/v1/systemone"
             PROVIDER_VERCEL -> "$base/v1/systemone"   // TypeSafe-compatible gateway
             PROVIDER_ZEN -> "$base/v1/systemone"      // TypeSafe-compatible gateway
+            // DeepSeek official has no /alpha/decisions or /v1/systemone; it is
+            // reached as an ordinary OpenAI-compatible chat completion and the
+            // judgment is expressed as a prompt (see DeepSeekDialect).
+            PROVIDER_DEEPSEEK -> "$base/chat/completions"
             PROVIDER_CUSTOM -> judgeBaseUrl.trim()   // user supplies the full URL
             else -> "$base/alpha/decisions"
         }
     }
+
+    /**
+     * True when the judge route must emulate the Jev decision protocol on top of
+     * a plain OpenAI-compatible chat completion instead of speaking the native
+     * `state` + `questions` / `noul` protocol.
+     */
+    fun judgeUsesChatCompletions(): Boolean = judgeProvider == PROVIDER_DEEPSEEK
 
     /** Full POST URL for the OpenAI-compatible chat completions call. */
     fun replyEndpoint(): String = "${replyBaseUrl.trim().trimEnd('/')}/chat/completions"
@@ -292,6 +304,7 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val PROVIDER_TYPESAFE = "typesafe"
         const val PROVIDER_VERCEL = "vercel"
         const val PROVIDER_ZEN = "zen"
+        const val PROVIDER_DEEPSEEK = "deepseek"
         const val PROVIDER_CUSTOM = "custom"
 
         const val OCR_MLKIT = "mlkit"
@@ -314,6 +327,13 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         // per judgment), jev-1.13-free is fully free but capability-limited.
         const val DEFAULT_JUDGE_BASE_ZEN = "https://opencode.ai/zen"
         const val DEFAULT_JUDGE_MODEL_ZEN = "jev-1.13"
+        // DeepSeek official (https://api.deepseek.com/v1). It serves no Jev
+        // protocol, so this route drives an ordinary chat completion and maps the
+        // reply back onto the same 7 answers — see DeepSeekDialect / JudgeClient.
+        // `deepseek-flash` is the vision-capable flagship; `deepseek-v4-pro` has
+        // no image input, so it is the wrong default for the vision card.
+        const val DEFAULT_JUDGE_BASE_DEEPSEEK = "https://api.deepseek.com/v1"
+        const val DEFAULT_JUDGE_MODEL_DEEPSEEK = "deepseek-flash"
 
         // Reply route presets (OpenAI-compatible chat completions).
         const val DEFAULT_REPLY_BASE = "https://openrouter.ai/api/v1"
@@ -327,6 +347,10 @@ class Prefs(context: Context, prefsName: String = PREFS_MAIN) {
         const val DEFAULT_VISION_BASE = "https://openrouter.ai/api/v1"
         const val DEFAULT_VISION_MODEL = "qwen/qwen2.5-vl-72b-instruct"
         const val DASHSCOPE_VISION_MODEL = "qwen-vl-max"
+        // DeepSeek official vision: `deepseek-flash` takes standard `image_url`
+        // content parts. The older `deepseek-v4-flash-vision-exp` name still
+        // resolves but the model behind it is retired, so it is not used here.
+        const val DEEPSEEK_VISION_MODEL = "deepseek-flash"
 
         const val DEFAULT_REL = "对方是我的伴侣；from=me 的是我发的，from=other 的是对方发的"
     }
